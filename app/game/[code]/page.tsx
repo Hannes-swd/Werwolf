@@ -266,6 +266,21 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
         if (!s) return
         submitVote(voterId, targetId, voteType)
       }
+      if (msg.type === 'hunter_shoot') {
+        const s = stateRef.current
+        if (!s || s.status !== 'hunter_pending') return
+        adminUpdate(hunterShoot(s, msg.payload.targetId))
+      }
+      if (msg.type === 'mayor_pass') {
+        const s = stateRef.current
+        if (!s || s.status !== 'mayor_pending') return
+        adminUpdate(mayorPassTitle(s, msg.payload.successorId))
+      }
+      if (msg.type === 'tiebreaker_pick') {
+        const s = stateRef.current
+        if (!s || s.status !== 'tiebreaker') return
+        adminUpdate(eliminatePlayer(s, msg.payload.targetId, 'tiebreaker'))
+      }
     })
     return () => { supabase.removeChannel(channel) }
   }, [isAdmin, code]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -347,8 +362,15 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
           myId={myId}
           selectable
           onSelect={id => {
-            if (!gs || !isAdmin) return
-            adminUpdate(hunterShoot(gs, id))
+            if (!gs) return
+            if (isAdmin) {
+              adminUpdate(hunterShoot(gs, id))
+            } else {
+              supabase.channel(`werwolf:${code}`).send({
+                type: 'broadcast', event: 'msg',
+                payload: { type: 'hunter_shoot', payload: { targetId: id } },
+              })
+            }
           }}
         />
       </main>
@@ -369,8 +391,15 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
           myId={myId}
           selectable
           onSelect={id => {
-            if (!gs || !isAdmin) return
-            adminUpdate(mayorPassTitle(gs, id))
+            if (!gs) return
+            if (isAdmin) {
+              adminUpdate(mayorPassTitle(gs, id))
+            } else {
+              supabase.channel(`werwolf:${code}`).send({
+                type: 'broadcast', event: 'msg',
+                payload: { type: 'mayor_pass', payload: { successorId: id } },
+              })
+            }
           }}
         />
       </main>
@@ -495,11 +524,20 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
               {me.isMayor ? 'Du entscheidest als Bürgermeister.' : `${mayor?.displayName ?? 'Bürgermeister'} entscheidet...`}
             </p>
           </div>
-          {me.isMayor && isAdmin && (
+          {me.isMayor && (
             <PlayerList
               players={alivePlayers.filter(p => p.id !== myId)}
               myId={myId} selectable
-              onSelect={id => adminUpdate(eliminatePlayer(gs, id, 'tiebreaker'))}
+              onSelect={id => {
+                if (isAdmin) {
+                  adminUpdate(eliminatePlayer(gs, id, 'tiebreaker'))
+                } else {
+                  supabase.channel(`werwolf:${code}`).send({
+                    type: 'broadcast', event: 'msg',
+                    payload: { type: 'tiebreaker_pick', payload: { targetId: id } },
+                  })
+                }
+              }}
             />
           )}
         </div>

@@ -53,6 +53,9 @@ export function applyNightAction(
     round = { ...round }
   }
 
+  if (action === 'heal') witchHealUsed = true
+  if (action === 'poison') witchPoisonUsed = true
+
   if (action === 'link' && targetId) {
     players = players.map(p => {
       if (p.id === actorId) return { ...p, loverId: targetId }
