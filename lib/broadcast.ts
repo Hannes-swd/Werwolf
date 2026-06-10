@@ -9,6 +9,8 @@ export type BroadcastMsg =
   | { type: 'vote'; payload: { voterId: string; targetId: string; voteType: string } }
   | { type: 'girl_peek_result'; payload: { requesterId: string; wolves: string[]; caught: boolean } }
   | { type: 'score_update'; payload: { playerId: string; playerName: string; score: number } }
+  | { type: 'kicked'; payload: { playerId: string } }
+  | { type: 'lobby_closed' }
 
 export function broadcastLobby(code: string, state: LobbyState) {
   supabase.channel(`werwolf:${code}`).send({

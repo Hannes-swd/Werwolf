@@ -114,6 +114,12 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
           return [...filtered, { playerId, playerName, score }]
         })
       }
+      if (msg.type === 'kicked' && msg.payload.playerId === me.id) {
+        router.push('/?kicked=1')
+      }
+      if (msg.type === 'lobby_closed') {
+        router.push('/?closed=1')
+      }
     })
 
     return () => { supabase.removeChannel(channel) }

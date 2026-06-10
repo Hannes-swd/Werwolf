@@ -18,6 +18,16 @@ export default function HomePage() {
   useEffect(() => {
     const cached = loadName()
     setName(cached || generateGuestName())
+
+    const params = new URLSearchParams(window.location.search)
+    const invite = params.get('join')
+    if (invite) setJoinCode(invite.toUpperCase())
+
+    if (params.get('kicked')) setError('Du wurdest aus der Lobby entfernt.')
+    else if (params.get('closed')) setError('Die Lobby wurde geschlossen.')
+
+    // Clean URL params
+    if (params.toString()) window.history.replaceState({}, '', '/')
   }, [])
 
   function handleNameChange(n: string) {

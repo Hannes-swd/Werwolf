@@ -18,6 +18,7 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
   const [myId, setMyId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [shared, setShared] = useState(false)
 
   const refreshLobby = useCallback(() => {
     const l = loadLobby(code)
@@ -34,7 +35,6 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
     const channel = subscribeToLobby(code, (msg: BroadcastMsg) => {
       if (msg.type === 'lobby_state') {
         const incoming = msg.payload
-        // Merge: keep local player entry, add others
         const l = loadLobby(code)
         if (!l) return
         const myEntry = l.players.find(p => p.id === me.id)
@@ -47,13 +47,17 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
         setLobby(merged)
       }
       if (msg.type === 'game_state') {
-        // Admin started the game
         router.push(`/game/${code}`)
       }
       if (msg.type === 'request_sync' && me.isAdmin) {
-        // New player joined – broadcast current lobby
         const l = loadLobby(code)
         if (l) broadcastLobby(code, l)
+      }
+      if (msg.type === 'kicked' && msg.payload.playerId === me.id) {
+        router.push('/?kicked=1')
+      }
+      if (msg.type === 'lobby_closed') {
+        router.push('/?closed=1')
       }
     })
 
@@ -105,6 +109,37 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
     setTimeout(() => setCopied(false), 2000)
   }
 
+  async function shareInvite() {
+    const url = `${window.location.origin}/?join=${code}`
+    if (navigator.share) {
+      await navigator.share({ title: 'Werwolf', text: `Tritt meiner Lobby bei! Code: ${code}`, url })
+    } else {
+      await navigator.clipboard.writeText(url)
+      setShared(true)
+      setTimeout(() => setShared(false), 2000)
+    }
+  }
+
+  function kickPlayer(playerId: string) {
+    if (!lobby || !isAdmin) return
+    const updated: LobbyState = { ...lobby, players: lobby.players.filter(p => p.id !== playerId) }
+    saveLobby(updated)
+    setLobby(updated)
+    broadcastLobby(code, updated)
+    supabase.channel(`werwolf:${code}`).send({
+      type: 'broadcast', event: 'msg',
+      payload: { type: 'kicked', payload: { playerId } },
+    })
+  }
+
+  function closeLobby() {
+    supabase.channel(`werwolf:${code}`).send({
+      type: 'broadcast', event: 'msg',
+      payload: { type: 'lobby_closed' },
+    })
+    router.push('/')
+  }
+
   if (!lobby) {
     return <main className="flex items-center justify-center min-h-dvh"><p className="text-gray-500">Lade...</p></main>
   }
@@ -112,15 +147,20 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
   return (
     <main className="min-h-dvh px-4 py-6 max-w-sm mx-auto space-y-5">
 
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center space-y-1">
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center space-y-2">
         <p className="text-gray-400 text-xs uppercase tracking-wider">Lobby-Code</p>
         <div className="flex items-center justify-center gap-3">
           <span className="text-3xl font-bold tracking-widest text-white">{code}</span>
           <button onClick={copyCode} className="text-gray-400 hover:text-white transition-colors text-sm">
-            {copied ? '✓ Kopiert' : '📋'}
+            {copied ? '✓' : '📋'}
           </button>
         </div>
-        <p className="text-gray-500 text-xs">Gib diesen Code deinen Mitspielern</p>
+        <button
+          onClick={shareInvite}
+          className="w-full py-2 bg-white/10 border border-white/20 rounded-xl text-white text-sm font-medium active:scale-95 transition-all"
+        >
+          {shared ? '✓ Link kopiert' : '🔗 Einladungslink teilen'}
+        </button>
       </div>
 
       <div className="space-y-2">
@@ -134,22 +174,39 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
               <span className="text-white flex-1">{p.name}</span>
               {p.id === myId && <span className="text-gray-500 text-xs">Du</span>}
               {p.isAdmin && <span className="text-yellow-400 text-sm">👑</span>}
+              {isAdmin && !p.isAdmin && p.id !== myId && (
+                <button
+                  onClick={() => kickPlayer(p.id)}
+                  className="text-gray-600 hover:text-red-400 transition-colors text-xs px-1"
+                  title="Kicken"
+                >
+                  ✕
+                </button>
+              )}
             </li>
           ))}
         </ul>
       </div>
 
       {isAdmin ? (
-        <AdminPanel
-          config={lobby.config}
-          playerCount={lobby.players.length}
-          votesVisible={lobby.settings.votesVisible}
-          mayorEnabled={lobby.settings.mayorEnabled}
-          autoConfig={lobby.settings.autoConfig}
-          onUpdate={async (config, settings) => updateLobbyConfig(config, settings)}
-          onStart={handleStart}
-          canStart={lobby.players.length >= 5}
-        />
+        <>
+          <AdminPanel
+            config={lobby.config}
+            playerCount={lobby.players.length}
+            votesVisible={lobby.settings.votesVisible}
+            mayorEnabled={lobby.settings.mayorEnabled}
+            autoConfig={lobby.settings.autoConfig}
+            onUpdate={async (config, settings) => updateLobbyConfig(config, settings)}
+            onStart={handleStart}
+            canStart={lobby.players.length >= 5}
+          />
+          <button
+            onClick={closeLobby}
+            className="w-full py-3 bg-red-950/50 border border-red-800/50 rounded-xl text-red-400 text-sm font-medium active:scale-95 transition-all"
+          >
+            Lobby schließen
+          </button>
+        </>
       ) : (
         <div className="text-center py-6">
           <p className="text-gray-500 text-sm">Warte auf den Admin...</p>
