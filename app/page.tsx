@@ -82,7 +82,11 @@ export default function HomePage() {
         channel?.unsubscribe()
 
         const lobby = msg.payload
-        const updatedPlayers = [...lobby.players, { id: playerId, name: playerName, isAdmin: false }]
+        // Admin may have already added this player via request_sync — don't duplicate
+        const alreadyAdded = lobby.players.some(p => p.id === playerId)
+        const updatedPlayers = alreadyAdded
+          ? lobby.players
+          : [...lobby.players, { id: playerId, name: playerName, isAdmin: false }]
         saveLobby({ ...lobby, players: updatedPlayers })
         saveMyPlayer(code, { id: playerId, name: playerName, isAdmin: false })
         saveName(playerName)
