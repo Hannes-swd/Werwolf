@@ -25,6 +25,8 @@ export default function NightPhase({
   const [selected, setSelected] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [peekResult, setPeekResult] = useState<{ wolves: string[]; caught: boolean } | null>(null)
+  const [amorFirst, setAmorFirst] = useState<string | null>(null)
+  const [witchMode, setWitchMode] = useState<'menu' | 'poison'>('menu')
 
   const alive = players.filter(p => p.isAlive)
   const aliveOthers = alive.filter(p => p.id !== myId)
@@ -53,7 +55,6 @@ export default function NightPhase({
 
   // ---- AMOR ----
   if (phase === 'amor' && myRole === 'amor') {
-    const [first, setFirst] = useState<string | null>(null)
     if (done) return <WaitingDone />
     return (
       <div className="space-y-4">
@@ -62,9 +63,9 @@ export default function NightPhase({
           players={aliveOthers}
           myId={myId}
           selectable
-          selectedId={first}
+          selectedId={amorFirst}
           onSelect={id => {
-            if (!first) { setFirst(id); return }
+            if (!amorFirst) { setAmorFirst(id); return }
             submit('link', id)
           }}
         />
@@ -177,7 +178,6 @@ export default function NightPhase({
   if (phase === 'witch' && myRole === 'witch') {
     const wolfKillId = nightActions.find(a => a.action === 'kill')?.targetId
     const wolfKillTarget = wolfKillId ? players.find(p => p.id === wolfKillId) : null
-    const [witchMode, setWitchMode] = useState<'menu' | 'poison'>('menu')
 
     if (done) return <WaitingDone />
     if (witchHealUsed && witchPoisonUsed) return <SkippedPhase reason="Beide Tränke verbraucht" />
