@@ -113,8 +113,9 @@ async function main() {
   console.log('Strg+C drücken um alle Browser zu schließen.\n')
 
   // Offen lassen bis Strg+C ODER alle Fenster manuell geschlossen
+  // timeout: 0 = kein Timeout (ohne das schließt Playwright nach ~30s automatisch)
   await Promise.race([
-    Promise.all(pages.map(p => p.waitForEvent('close').catch(() => {}))),
+    Promise.all(pages.map(p => p.waitForEvent('close', { timeout: 0 }).catch(() => {}))),
     new Promise(resolve => process.once('SIGINT', resolve)),
   ])
 
