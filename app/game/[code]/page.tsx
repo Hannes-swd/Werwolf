@@ -14,6 +14,8 @@ import PlayerList from '@/components/PlayerList'
 import NightPhase from '@/components/NightPhase'
 import VotePanel from '@/components/VotePanel'
 import GameLog from '@/components/GameLog'
+import MiniGame from '@/components/MiniGame'
+import ScoreBoard, { PlayerScore } from '@/components/ScoreBoard'
 import { exportGameTxt, exportGameJson } from '@/lib/exportGame'
 import { ROLE_LABELS, ROLE_ICONS, GameEvent, NightAction, Vote, Player } from '@/types/game'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -69,7 +71,10 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   const [notification, setNotification] = useState<string | null>(null)
   const [girlPeeked, setGirlPeeked] = useState(false)
   const [peekResult, setPeekResult] = useState<{ wolves: string[]; caught: boolean } | null>(null)
+  const [myScore, setMyScore] = useState(0)
+  const [scores, setScores] = useState<PlayerScore[]>([])
   const stateRef = useRef<GameState | null>(null)
+  const myScoreRef = useRef(0)
 
   function notify(msg: string) {
     setNotification(msg)
@@ -93,7 +98,6 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     const channel = subscribeToLobby(code, (msg: BroadcastMsg) => {
       if (msg.type === 'game_state') {
         applyState(msg.payload)
-        // Non-admin: check if vote already cast this round
         const myVoteEntry = msg.payload.currentRound.votes.find(
           v => v.voterId === me.id && (v.voteType === 'day_elimination' || v.voteType === 'mayor_election')
         )
@@ -102,6 +106,13 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       if (msg.type === 'request_sync' && me.isAdmin) {
         const s = stateRef.current
         if (s) broadcastGame(code, s)
+      }
+      if (msg.type === 'score_update') {
+        const { playerId, playerName, score } = msg.payload
+        setScores(prev => {
+          const filtered = prev.filter(s => s.playerId !== playerId)
+          return [...filtered, { playerId, playerName, score }]
+        })
       }
     })
 
@@ -112,6 +123,21 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   function adminUpdate(newState: GameState) {
     applyState(newState)
     broadcastGame(code, newState)
+  }
+
+  // Mini-game score
+  function handleScore(delta: number) {
+    const next = myScoreRef.current + delta
+    myScoreRef.current = next
+    setMyScore(next)
+    if (!myId) return
+    const me = stateRef.current?.players.find(p => p.id === myId)
+    const entry: PlayerScore = { playerId: myId, playerName: me?.name ?? '?', score: next }
+    setScores(prev => [...prev.filter(s => s.playerId !== myId), entry])
+    supabase.channel(`werwolf:${code}`).send({
+      type: 'broadcast', event: 'msg',
+      payload: { type: 'score_update', payload: entry },
+    })
   }
 
   // ---- Night action (admin processes) ----
@@ -247,6 +273,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
           <p className="text-gray-400 text-xs uppercase tracking-wider">Alle Rollen</p>
           <PlayerList players={players} myId={myId} showRoles />
         </div>
+        {scores.length > 0 && <ScoreBoard scores={scores} myId={myId} />}
         <GameLog events={events} />
         <div className="space-y-2">
           <button
@@ -454,6 +481,22 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
         <p className="text-gray-500 text-xs uppercase tracking-wider">Spieler</p>
         <PlayerList players={players} myId={myId} />
       </div>
+
+      {/* Mini-game: aktiv wenn Spieler wartet (nicht sein Turn) */}
+      {me.isAlive && roleRevealed && (
+        <MiniGame
+          score={myScore}
+          onScore={handleScore}
+          active={!(
+            (gs.status === 'night' && gs.phase === me.role) ||
+            (gs.status === 'night' && gs.phase === 'wolf' && me.role === 'werewolf') ||
+            (gs.status === 'night' && gs.phase === 'witch' && me.role === 'witch') ||
+            (gs.status === 'day_vote') ||
+            (gs.status === 'mayor_election') ||
+            (gs.status === 'tiebreaker' && me.isMayor)
+          )}
+        />
+      )}
 
       {events.length > 0 && <GameLog events={events} />}
 
