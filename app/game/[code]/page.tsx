@@ -128,6 +128,15 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       }
     })
 
+    if (!me.isAdmin && !saved) {
+      setTimeout(() => {
+        supabase.channel(`werwolf:${code}`).send({
+          type: 'broadcast', event: 'msg',
+          payload: { type: 'request_sync' },
+        })
+      }, 800)
+    }
+
     return () => { supabase.removeChannel(channel) }
   }, [code, router])
 

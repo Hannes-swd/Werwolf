@@ -17,13 +17,13 @@ export function startGame(state: GameState): GameState {
   const ids = state.players.map(p => p.id)
   const roleMap = assignRoles(ids, state.config)
   const players = state.players.map(p => ({ ...p, role: roleMap.get(p.id) ?? 'villager' as const }))
-  const next: GameState = {
-    ...state,
-    players,
-    status: state.settings.mayorEnabled ? 'mayor_election' : 'night',
-    round: 0,
-    currentRound: makeEmptyRound(state.code, 0),
+  if (state.settings.mayorEnabled) {
+    const next: GameState = { ...state, players, status: 'mayor_election', phase: null, round: 0, currentRound: makeEmptyRound(state.code, 0) }
+    saveGameState(next)
+    return next
   }
+  const nightBase: GameState = { ...state, players, status: 'night', phase: null, round: 0, currentRound: makeEmptyRound(state.code, 0) }
+  const next: GameState = { ...nightBase, phase: nextNightPhase(nightBase) }
   saveGameState(next)
   return next
 }
@@ -180,10 +180,8 @@ export function resolveVotes(state: GameState, voteType: string): GameState {
       const players = state.players.map(p => ({ ...p, isMayor: p.id === elected }))
       const round = { ...state.currentRound, mayorElected: elected, mayorElectedName: electedName }
       saveRound(round)
-      const next: GameState = {
-        ...state, players, status: 'night', round: 1,
-        currentRound: makeEmptyRound(state.code, 1),
-      }
+      const nightBase: GameState = { ...state, players, status: 'night', phase: null, round: 1, currentRound: makeEmptyRound(state.code, 1) }
+      const next: GameState = { ...nightBase, phase: nextNightPhase(nightBase) }
       saveGameState(next)
       return next
     }
@@ -198,7 +196,8 @@ export function resolveVotes(state: GameState, voteType: string): GameState {
     if (!mayor) {
       const round = { ...state.currentRound }
       saveRound(round)
-      const n2: GameState = { ...state, status: 'night', round: state.round + 1, currentRound: makeEmptyRound(state.code, state.round + 1) }
+      const nightBase: GameState = { ...state, status: 'night', phase: null, round: state.round + 1, currentRound: makeEmptyRound(state.code, state.round + 1) }
+      const n2: GameState = { ...nightBase, phase: nextNightPhase(nightBase) }
       saveGameState(n2)
       return n2
     }
@@ -219,7 +218,8 @@ export function eliminatePlayer(state: GameState, targetId: string, phase: strin
     players = players.map(p => p.id === targetId ? { ...p, canVote: false } : p)
     round = { ...round, foolRevealed: true, eliminated: targetId, eliminatedName: target.name, eliminatedRole: 'fool' }
     saveRound(round)
-    const next: GameState = { ...state, players, status: 'night', round: state.round + 1, currentRound: makeEmptyRound(state.code, state.round + 1) }
+    const nightBase: GameState = { ...state, players, status: 'night', phase: null, round: state.round + 1, currentRound: makeEmptyRound(state.code, state.round + 1) }
+    const next: GameState = { ...nightBase, phase: nextNightPhase(nightBase) }
     saveGameState(next)
     return next
   }
@@ -259,7 +259,8 @@ export function eliminatePlayer(state: GameState, targetId: string, phase: strin
     return next
   }
 
-  const next: GameState = { ...state, players, status: 'night', round: state.round + 1, currentRound: makeEmptyRound(state.code, state.round + 1) }
+  const nightBase: GameState = { ...state, players, status: 'night', phase: null, round: state.round + 1, currentRound: makeEmptyRound(state.code, state.round + 1) }
+  const next: GameState = { ...nightBase, phase: nextNightPhase(nightBase) }
   saveGameState(next)
   return next
 }
@@ -271,14 +272,11 @@ export function hunterShoot(state: GameState, targetId: string): GameState {
 
   const winner = checkWinCondition(players.map(toPlayer))
   const wasNight = state.status === 'hunter_pending' && state.phase !== null
-  const next: GameState = {
-    ...state, players,
-    status: winner ? 'ended' : wasNight ? 'day_discussion' : 'night',
-    round: winner || wasNight ? state.round : state.round + 1,
-    currentRound: round,
-    winner: winner ?? null,
-  }
-  if (!winner && !wasNight) next.currentRound = makeEmptyRound(state.code, state.round + 1)
+  const newStatus = winner ? 'ended' : wasNight ? 'day_discussion' : 'night'
+  const newRound = winner || wasNight ? state.round : state.round + 1
+  const newCurrentRound = !winner && !wasNight ? makeEmptyRound(state.code, newRound) : round
+  const base: GameState = { ...state, players, status: newStatus, phase: null, round: newRound, currentRound: newCurrentRound, winner: winner ?? null }
+  const next: GameState = newStatus === 'night' ? { ...base, phase: nextNightPhase(base) } : base
   saveRound(round)
   saveGameState(next)
   return next
@@ -287,14 +285,15 @@ export function hunterShoot(state: GameState, targetId: string): GameState {
 export function mayorPassTitle(state: GameState, successorId: string): GameState {
   const successor = state.players.find(p => p.id === successorId)!
   const players = state.players.map(p => ({ ...p, isMayor: p.id === successorId }))
-  const round = { ...state.currentRound }
   const wasDayPhase = state.status === 'mayor_pending' || state.status === 'day_vote' || state.status === 'tiebreaker'
-  const next: GameState = {
-    ...state, players,
+  const newRound = wasDayPhase ? state.round + 1 : state.round
+  const base: GameState = {
+    ...state, players, phase: null,
     status: wasDayPhase ? 'night' : 'day_discussion',
-    round: wasDayPhase ? state.round + 1 : state.round,
-    currentRound: wasDayPhase ? makeEmptyRound(state.code, state.round + 1) : round,
+    round: newRound,
+    currentRound: wasDayPhase ? makeEmptyRound(state.code, newRound) : state.currentRound,
   }
+  const next: GameState = wasDayPhase ? { ...base, phase: nextNightPhase(base) } : base
   saveGameState(next)
   return next
 }

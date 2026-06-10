@@ -47,6 +47,7 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
         setLobby(merged)
       }
       if (msg.type === 'game_state') {
+        saveGameState(msg.payload)
         router.push(`/game/${code}`)
       }
       if (msg.type === 'request_sync' && me.isAdmin) {
