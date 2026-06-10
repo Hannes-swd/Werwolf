@@ -48,7 +48,7 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
       }
       if (msg.type === 'game_state') {
         saveGameState(msg.payload)
-        router.push(`/game/${code}`)
+        window.location.href = `/game/${code}`
       }
       if (msg.type === 'request_sync' && me.isAdmin) {
         const l = loadLobby(code)
@@ -124,7 +124,7 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
     const started = startGame(gs)
     saveGameState(started)
     broadcastGame(code, started)
-    router.push(`/game/${code}`)
+    window.location.href = `/game/${code}`
   }
 
   async function copyCode() {
