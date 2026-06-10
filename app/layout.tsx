@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import PWARegister from '@/components/PWARegister'
+import ChunkErrorHandler from '@/components/ChunkErrorHandler'
 
 export const metadata: Metadata = {
   title: 'Werwolf',
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="de" className="h-full">
       <body className="min-h-dvh flex flex-col antialiased">
+        <ChunkErrorHandler />
         <PWARegister />
         {children}
       </body>

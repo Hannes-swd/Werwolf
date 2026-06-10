@@ -94,6 +94,12 @@ async function main() {
     { timeout: 20_000 }
   )
 
+  // Hard-reload alle Browser damit sie das neueste Vercel-Deployment laden
+  console.log('\n♻️  Lade alle Browser neu (neuestes Deployment)...')
+  await Promise.all(pages.map(p => p.reload({ waitUntil: 'domcontentloaded' })))
+  // Kurz warten bis alle wieder in der Lobby sind
+  await new Promise(r => setTimeout(r, 2000))
+
   console.log('\n🎮 Alle 5 Spieler sind in der Lobby!')
   console.log('─────────────────────────────────────')
   console.log('Die Browser bleiben offen – du kannst jetzt manuell spielen.')
