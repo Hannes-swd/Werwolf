@@ -15,6 +15,28 @@ const POSITIONS = [
   { x: 410,  y: 500 },
 ]
 
+// Noise-Filter: diese Strings werden nicht geloggt
+const IGNORE = [
+  'Download the React DevTools',
+  'ReactDOM.render is no longer supported',
+  '%c%s',
+  'Warning:',
+  '[Fast Refresh]',
+]
+
+function attachLogger(page, name) {
+  page.on('console', msg => {
+    const text = msg.text()
+    if (IGNORE.some(s => text.includes(s))) return
+    const type = msg.type()
+    const prefix = type === 'error' ? '🔴' : type === 'warn' ? '🟡' : '  '
+    console.log(`${prefix} [${name}] ${text}`)
+  })
+  page.on('pageerror', err => {
+    console.log(`🔴 [${name}] PAGE ERROR: ${err.message}`)
+  })
+}
+
 async function main() {
   console.log('\n🐺 WERWOLF – Lobby-Setup\n')
   console.log('Starte 5 Browser-Fenster...')
@@ -32,6 +54,7 @@ async function main() {
       viewport: { width: 390, height: 750 },
     })
     const page = await ctx.newPage()
+    attachLogger(page, NAMES[i])
 
     // Fenster positionieren
     await page.evaluate(
@@ -78,11 +101,12 @@ async function main() {
   for (let i = 1; i < 5; i++) {
     console.log(`Fenster ${i + 1}         = ${NAMES[i]}`)
   }
-  console.log('\nStrg+C drücken um alle Browser zu schließen.\n')
+  console.log('\nKonsolen-Logs der Browser werden hier angezeigt.')
+  console.log('Strg+C drücken um alle Browser zu schließen.\n')
 
-  // Offen lassen bis Strg+C oder alle Fenster geschlossen
+  // Offen lassen bis Strg+C ODER alle Fenster manuell geschlossen
   await Promise.race([
-    ...pages.map(p => p.waitForEvent('close').catch(() => {})),
+    Promise.all(pages.map(p => p.waitForEvent('close').catch(() => {}))),
     new Promise(resolve => process.once('SIGINT', resolve)),
   ])
 
