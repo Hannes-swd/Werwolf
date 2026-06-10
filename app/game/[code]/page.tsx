@@ -97,6 +97,8 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
     const channel = subscribeToLobby(code, (msg: BroadcastMsg) => {
       if (msg.type === 'game_state') {
+        // Admin is source of truth — don't overwrite own state with echo of own broadcast
+        if (me.isAdmin) return
         const prevRound = stateRef.current?.round ?? 0
         applyState(msg.payload)
         const myVoteEntry = msg.payload.currentRound.votes.find(
@@ -128,8 +130,9 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       }
     })
 
+    let syncTimer: ReturnType<typeof setTimeout> | null = null
     if (!me.isAdmin && !saved) {
-      setTimeout(() => {
+      syncTimer = setTimeout(() => {
         supabase.channel(`werwolf:${code}`).send({
           type: 'broadcast', event: 'msg',
           payload: { type: 'request_sync' },
@@ -137,7 +140,10 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       }, 800)
     }
 
-    return () => { supabase.removeChannel(channel) }
+    return () => {
+      supabase.removeChannel(channel)
+      if (syncTimer) clearTimeout(syncTimer)
+    }
   }, [code, router])
 
   // Admin: mutate state, broadcast, persist

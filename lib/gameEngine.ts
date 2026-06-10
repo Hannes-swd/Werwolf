@@ -80,33 +80,37 @@ export function resolveNight(state: GameState): GameState {
 
   // Wolf kill (check priest protection)
   if (wolfTarget) {
-    const target = players.find(p => p.id === wolfTarget)!
-    const witchHeal = state.currentRound.nightActions.find(a => a.action === 'heal')
-    if (target.priestBlessed) {
-      round = { ...round, priestProtected: true }
-    } else if (witchHeal?.targetId === wolfTarget) {
-      round = { ...round, healed: true }
-    } else {
-      deaths.push(wolfTarget)
-      deathNames.push(target.name)
+    const target = players.find(p => p.id === wolfTarget)
+    if (target) {
+      const witchHeal = state.currentRound.nightActions.find(a => a.action === 'heal')
+      if (target.priestBlessed) {
+        round = { ...round, priestProtected: true }
+      } else if (witchHeal?.targetId === wolfTarget) {
+        round = { ...round, healed: true }
+      } else {
+        deaths.push(wolfTarget)
+        deathNames.push(target.name)
+      }
     }
   }
 
   // Witch poison
   const poison = state.currentRound.nightActions.find(a => a.action === 'poison')
   if (poison?.targetId) {
-    const target = players.find(p => p.id === poison.targetId)!
-    if (!deaths.includes(poison.targetId)) {
-      deaths.push(poison.targetId)
-      deathNames.push(target.name)
+    const target = players.find(p => p.id === poison.targetId)
+    if (target) {
+      if (!deaths.includes(poison.targetId)) {
+        deaths.push(poison.targetId)
+        deathNames.push(target.name)
+      }
+      round = { ...round, poisonTarget: poison.targetId, poisonTargetName: target.name }
     }
-    round = { ...round, poisonTarget: poison.targetId, poisonTargetName: target.name }
   }
 
   // Apply deaths + lover chain
   for (const id of [...deaths]) {
-    const dead = players.find(p => p.id === id)!
-    if (dead.loverId) {
+    const dead = players.find(p => p.id === id)
+    if (dead?.loverId) {
       const lover = players.find(p => p.id === dead.loverId)
       if (lover && lover.isAlive && !deaths.includes(lover.id)) {
         deaths.push(lover.id)
@@ -147,9 +151,9 @@ export function applyVote(
   targetId: string,
   voteType: string
 ): GameState {
-  const voter = state.players.find(p => p.id === voterId)!
-  const target = state.players.find(p => p.id === targetId)!
-  const record = { voterId, voterName: voter.name, targetId, targetName: target.name, voteType }
+  const voter = state.players.find(p => p.id === voterId)
+  const target = state.players.find(p => p.id === targetId)
+  const record = { voterId, voterName: voter?.name ?? '', targetId, targetName: target?.name ?? '', voteType }
 
   const existing = state.currentRound.votes.filter(
     v => !(v.voterId === voterId && v.voteType === voteType)
