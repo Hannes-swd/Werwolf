@@ -1,22 +1,21 @@
 'use client'
-import { use, useEffect, useState, useCallback, useRef } from 'react'
+import { use, useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { GameState, loadGameState, saveRound, loadAllRounds, RoundData } from '@/lib/storage'
-import { loadMyPlayer } from '@/lib/storage'
+import { GameState, loadGameState, saveRound, loadAllRounds, RoundData, loadMyPlayer, saveMyPlayer, saveLobby } from '@/lib/storage'
 import { broadcastGame, subscribeToLobby, BroadcastMsg } from '@/lib/broadcast'
 import {
   applyNightAction, resolveNight, applyVote, resolveVotes,
   eliminatePlayer, hunterShoot, mayorPassTitle, advanceToPhase, nextNightPhase,
 } from '@/lib/gameEngine'
+import { generateLobbyCode } from '@/lib/roleAssignment'
 import RoleCard from '@/components/RoleCard'
 import PlayerList from '@/components/PlayerList'
 import NightPhase from '@/components/NightPhase'
 import VotePanel from '@/components/VotePanel'
 import GameLog from '@/components/GameLog'
 import MiniGame from '@/components/MiniGame'
-import ScoreBoard, { PlayerScore } from '@/components/ScoreBoard'
-import { exportGameTxt, exportGameJson } from '@/lib/exportGame'
+import { PlayerScore } from '@/components/ScoreBoard'
 import { ROLE_LABELS, ROLE_ICONS, GameEvent, NightAction, Vote, Player } from '@/types/game'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -73,6 +72,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   const [peekResult, setPeekResult] = useState<{ wolves: string[]; caught: boolean } | null>(null)
   const [myScore, setMyScore] = useState(0)
   const [scores, setScores] = useState<PlayerScore[]>([])
+  const [rematchCode, setRematchCode] = useState<string | null>(null)
   const stateRef = useRef<GameState | null>(null)
   const myScoreRef = useRef(0)
 
@@ -122,6 +122,15 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
           return [...filtered, { playerId, playerName, score }]
         })
       }
+      if (msg.type === 'rematch') {
+        const { newCode, config, settings } = msg.payload
+        const myData = loadMyPlayer(code)
+        if (myData) {
+          saveMyPlayer(newCode, { id: myData.id, name: myData.name, isAdmin: false })
+          saveLobby({ code: newCode, config, settings, players: [] })
+        }
+        setRematchCode(newCode)
+      }
       if (msg.type === 'kicked' && msg.payload.playerId === me.id) {
         router.push('/?kicked=1')
       }
@@ -165,6 +174,21 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       type: 'broadcast', event: 'msg',
       payload: { type: 'score_update', payload: entry },
     })
+  }
+
+  // ---- Rematch (admin only) ----
+  function handleRematch() {
+    if (!isAdmin || !gs) return
+    const myData = loadMyPlayer(code)
+    if (!myData) return
+    const newCode = generateLobbyCode()
+    saveMyPlayer(newCode, { id: myData.id, name: myData.name, isAdmin: true })
+    saveLobby({ code: newCode, config: gs.config, settings: gs.settings, players: [{ id: myData.id, name: myData.name, isAdmin: true }] })
+    supabase.channel(`werwolf:${code}`).send({
+      type: 'broadcast', event: 'msg',
+      payload: { type: 'rematch', payload: { newCode, config: gs.config, settings: gs.settings } },
+    })
+    window.location.href = `/lobby/${newCode}`
   }
 
   // ---- Night action (admin processes) ----
@@ -305,7 +329,12 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   if (gs.winner || gs.status === 'ended') {
     const w = gs.winner
     const winnerLabel = w === 'village' ? 'DORF' : w === 'wolves' ? 'WERWÖLFE' : 'LIEBESPAAR'
-    const winnerEmoji = winnerLabel === 'WERWÖLFE' ? '🐺' : winnerLabel === 'LIEBESPAAR' ? '💘' : '🏡'
+    const winnerEmoji = w === 'wolves' ? '🐺' : w === 'lovers' ? '💘' : '🏡'
+    const sortedPlayers = [...players].sort((a, b) => {
+      const sa = scores.find(s => s.playerId === a.id)?.score ?? 0
+      const sb = scores.find(s => s.playerId === b.id)?.score ?? 0
+      return sb - sa
+    })
     return (
       <main className="min-h-dvh px-4 py-8 max-w-sm mx-auto space-y-6">
         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-center space-y-3">
@@ -313,23 +342,69 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
           <h1 className="text-3xl font-bold text-white">{winnerLabel} GEWINNT!</h1>
           <p className="text-gray-400 text-sm">nach {gs.round} Runden</p>
         </motion.div>
+
         <div className="space-y-2">
-          <p className="text-gray-400 text-xs uppercase tracking-wider">Alle Rollen</p>
-          <PlayerList players={players} myId={myId} showRoles />
+          <p className="text-gray-400 text-xs uppercase tracking-wider">Rollen & Punkte</p>
+          <ul className="space-y-1.5">
+            {sortedPlayers.map((p, i) => {
+              const score = scores.find(s => s.playerId === p.id)?.score ?? 0
+              const medals = ['🥇', '🥈', '🥉']
+              const medal = scores.length > 0 && score > 0 ? (medals[i] ?? null) : null
+              return (
+                <motion.li
+                  key={p.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.06 }}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border
+                    ${p.id === myId ? 'bg-white/10 border-white/30' : 'bg-white/5 border-white/10'}
+                    ${!p.isAlive ? 'opacity-60' : ''}`}
+                >
+                  <span className="text-xl w-7 text-center">{p.role ? ROLE_ICONS[p.role] : '?'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-medium truncate">
+                      {p.displayName}{p.id === myId ? ' (Du)' : ''}
+                      {p.isMayor ? ' 👑' : ''}
+                    </p>
+                    <p className="text-gray-500 text-xs">{p.role ? ROLE_LABELS[p.role] : ''}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {medal && <span className="text-base">{medal}</span>}
+                    {score > 0 && <span className="text-yellow-400 font-bold text-sm">🪙 {score}</span>}
+                  </div>
+                </motion.li>
+              )
+            })}
+          </ul>
         </div>
-        {scores.length > 0 && <ScoreBoard scores={scores} myId={myId} />}
-        <GameLog events={events} />
-        <div className="space-y-2">
-          <button
-            onClick={() => exportGameTxt(code, players, events, w, gs.round, mayor?.displayName ?? null, gs.settings.votesVisible)}
-            className="w-full py-3 bg-white/10 border border-white/20 rounded-xl text-white font-semibold active:scale-95"
-          >📄 Als .txt exportieren</button>
-          <button
-            onClick={() => exportGameJson(code, players, events, w, gs.round)}
-            className="w-full py-3 bg-white/10 border border-white/20 rounded-xl text-white font-semibold active:scale-95"
-          >📋 Als .json exportieren</button>
-          <button onClick={() => router.push('/')} className="w-full py-3 bg-white text-gray-900 rounded-xl font-bold active:scale-95">
-            Neues Spiel
+
+        <div className="space-y-2 pt-2">
+          {isAdmin ? (
+            <button
+              onClick={handleRematch}
+              className="w-full py-4 bg-white text-gray-900 rounded-2xl font-bold text-base active:scale-95 transition-all"
+            >
+              Nochmal spielen
+            </button>
+          ) : rematchCode ? (
+            <button
+              onClick={() => { window.location.href = `/lobby/${rematchCode}` }}
+              className="w-full py-4 bg-white text-gray-900 rounded-2xl font-bold text-base active:scale-95 transition-all"
+            >
+              Beitreten →
+            </button>
+          ) : (
+            <div className="text-center py-3 space-y-2">
+              <p className="text-gray-500 text-sm">Warte auf Admin...</p>
+              <div className="flex justify-center gap-1">
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="w-2 h-2 bg-gray-600 rounded-full animate-pulse" style={{ animationDelay: `${i * 200}ms` }} />
+                ))}
+              </div>
+            </div>
+          )}
+          <button onClick={() => router.push('/')} className="w-full py-3 bg-white/10 border border-white/20 rounded-xl text-gray-400 text-sm active:scale-95 transition-all">
+            Hauptmenü
           </button>
         </div>
       </main>

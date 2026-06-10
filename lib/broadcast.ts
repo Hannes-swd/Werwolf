@@ -10,6 +10,7 @@ export type BroadcastMsg =
   | { type: 'vote'; payload: { voterId: string; targetId: string; voteType: string } }
   | { type: 'girl_peek_result'; payload: { requesterId: string; wolves: string[]; caught: boolean } }
   | { type: 'score_update'; payload: { playerId: string; playerName: string; score: number } }
+  | { type: 'rematch'; payload: { newCode: string; config: import('@/types/game').RoleConfig; settings: import('@/lib/storage').LobbyState['settings'] } }
   | { type: 'hunter_shoot'; payload: { targetId: string } }
   | { type: 'mayor_pass'; payload: { successorId: string } }
   | { type: 'tiebreaker_pick'; payload: { targetId: string } }
