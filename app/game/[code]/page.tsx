@@ -97,11 +97,17 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
     const channel = subscribeToLobby(code, (msg: BroadcastMsg) => {
       if (msg.type === 'game_state') {
+        const prevRound = stateRef.current?.round ?? 0
         applyState(msg.payload)
         const myVoteEntry = msg.payload.currentRound.votes.find(
           v => v.voterId === me.id && (v.voteType === 'day_elimination' || v.voteType === 'mayor_election')
         )
-        setMyVote(myVoteEntry?.targetId ?? null)
+        if (myVoteEntry) {
+          setMyVote(myVoteEntry.targetId)
+        } else if (msg.payload.round !== prevRound) {
+          setMyVote(null)
+        }
+        // else: keep current myVote — vote is still in flight, don't clear the selection
       }
       if (msg.type === 'request_sync' && me.isAdmin) {
         const s = stateRef.current
@@ -148,8 +154,9 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
   // ---- Night action (admin processes) ----
   function submitNightAction(actorId: string, targetId: string | null, action: string) {
-    if (!gs || !isAdmin) return
-    const s = applyNightAction(gs, actorId, targetId, action, gs.phase ?? '')
+    const current = stateRef.current
+    if (!current || !isAdmin) return
+    const s = applyNightAction(current, actorId, targetId, action, current.phase ?? '')
 
     if (action === 'peek') {
       // Girl peek – handled locally
@@ -157,7 +164,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     }
 
     // Check if wolf phase is complete
-    if (gs.phase === 'wolf' && action === 'kill') {
+    if (current.phase === 'wolf' && action === 'kill') {
       const wolves = s.players.filter(p => p.role === 'werewolf' && p.isAlive)
       const wolfVotes = s.currentRound.nightActions.filter(a => a.phase === 'wolf' && a.action === 'kill')
       const allDone = wolves.every(w => wolfVotes.some(v => v.actorId === w.id))
@@ -166,7 +173,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
     // Single-actor phases: advance after action
     if (['bless', 'heal', 'poison', 'reveal', 'link', 'skip'].includes(action) ||
-        (gs.phase === 'wolf' && action === 'kill')) {
+        (current.phase === 'wolf' && action === 'kill')) {
       const next = nextNightPhase(s)
       if (next) {
         adminUpdate(advanceToPhase(s, next))
@@ -185,8 +192,9 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
   // ---- Vote (admin processes) ----
   function submitVote(voterId: string, targetId: string, voteType: string) {
-    if (!gs || !isAdmin) return
-    const s = applyVote(gs, voterId, targetId, voteType)
+    const current = stateRef.current
+    if (!current || !isAdmin) return
+    const s = applyVote(current, voterId, targetId, voteType)
     const eligible = s.players.filter(p => p.isAlive && (voteType === 'mayor_election' || p.canVote))
     const cast = s.currentRound.votes.filter(v => v.voteType === voteType)
     if (cast.length >= eligible.length) {
