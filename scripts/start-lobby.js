@@ -35,6 +35,14 @@ function attachLogger(page, name) {
   page.on('pageerror', err => {
     console.log(`🔴 [${name}] PAGE ERROR: ${err.message}`)
   })
+  page.on('framenavigated', frame => {
+    if (frame === page.mainFrame()) {
+      console.log(`🔀 [${name}] navigiert zu: ${frame.url()}`)
+    }
+  })
+  page.on('crash', () => {
+    console.log(`💥 [${name}] BROWSER CRASH`)
+  })
 }
 
 async function main() {
@@ -93,12 +101,6 @@ async function main() {
     () => document.body.innerText.toUpperCase().includes('SPIELER (5)'),
     { timeout: 20_000 }
   )
-
-  // Hard-reload alle Browser damit sie das neueste Vercel-Deployment laden
-  console.log('\n♻️  Lade alle Browser neu (neuestes Deployment)...')
-  await Promise.all(pages.map(p => p.reload({ waitUntil: 'domcontentloaded' })))
-  // Kurz warten bis alle wieder in der Lobby sind
-  await new Promise(r => setTimeout(r, 2000))
 
   console.log('\n🎮 Alle 5 Spieler sind in der Lobby!')
   console.log('─────────────────────────────────────')

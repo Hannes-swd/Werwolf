@@ -81,6 +81,7 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
     })
 
     // Non-admin: announce arrival so admin can add us to the lobby
+    let syncPoll: ReturnType<typeof setInterval> | null = null
     if (!me.isAdmin) {
       setTimeout(() => {
         supabase.channel(`werwolf:${code}`).send({
@@ -88,9 +89,20 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
           payload: { type: 'player_joined', payload: { id: me.id, name: me.name } },
         })
       }, 400)
+      // Fallback: if we miss the game_state broadcast (e.g. late Supabase reconnect),
+      // keep polling so admin (now on game page) can push us the state via request_sync.
+      syncPoll = setInterval(() => {
+        supabase.channel(`werwolf:${code}`).send({
+          type: 'broadcast', event: 'msg',
+          payload: { type: 'request_sync' },
+        })
+      }, 2000)
     }
 
-    return () => { supabase.removeChannel(channel) }
+    return () => {
+      supabase.removeChannel(channel)
+      if (syncPoll) clearInterval(syncPoll)
+    }
   }, [code, router, refreshLobby])
 
 
