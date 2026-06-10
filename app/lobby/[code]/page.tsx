@@ -51,7 +51,16 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
       }
       if (msg.type === 'request_sync' && me.isAdmin) {
         const l = loadLobby(code)
-        if (l) broadcastLobby(code, l)
+        if (!l) return
+        const jp = msg.payload?.joiningPlayer
+        if (jp && !l.players.some(p => p.id === jp.id)) {
+          const updated: LobbyState = { ...l, players: [...l.players, { id: jp.id, name: jp.name, isAdmin: false }] }
+          saveLobby(updated)
+          setLobby(updated)
+          broadcastLobby(code, updated)
+        } else {
+          broadcastLobby(code, l)
+        }
       }
       if (msg.type === 'player_joined' && me.isAdmin) {
         const { id, name } = msg.payload

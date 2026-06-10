@@ -93,7 +93,7 @@ export default function HomePage() {
     setTimeout(() => {
       supabase.channel(`werwolf:${code}`).send({
         type: 'broadcast', event: 'msg',
-        payload: { type: 'request_sync' },
+        payload: { type: 'request_sync', payload: { joiningPlayer: { id: playerId, name: playerName } } },
       })
     }, 500)
   }

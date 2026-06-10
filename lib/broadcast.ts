@@ -4,7 +4,7 @@ import { GameState, LobbyState } from '@/lib/storage'
 export type BroadcastMsg =
   | { type: 'lobby_state'; payload: LobbyState }
   | { type: 'game_state'; payload: GameState }
-  | { type: 'request_sync' }
+  | { type: 'request_sync'; payload?: { joiningPlayer?: { id: string; name: string } } }
   | { type: 'player_joined'; payload: { id: string; name: string } }
   | { type: 'night_action'; payload: { phase: string; actorId: string; targetId: string | null; action: string } }
   | { type: 'vote'; payload: { voterId: string; targetId: string; voteType: string } }
