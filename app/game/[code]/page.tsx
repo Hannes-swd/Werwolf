@@ -1,241 +1,263 @@
 'use client'
-import { use, useEffect, useState, useCallback } from 'react'
+import { use, useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { Player, Lobby, GameEvent, Vote, NightAction, ROLE_LABELS, ROLE_ICONS } from '@/types/game'
+import { GameState, loadGameState, saveRound, loadAllRounds, RoundData } from '@/lib/storage'
+import { loadMyPlayer } from '@/lib/storage'
+import { broadcastGame, subscribeToLobby, BroadcastMsg } from '@/lib/broadcast'
+import {
+  applyNightAction, resolveNight, applyVote, resolveVotes,
+  eliminatePlayer, hunterShoot, mayorPassTitle, advanceToPhase, nextNightPhase,
+} from '@/lib/gameEngine'
 import RoleCard from '@/components/RoleCard'
 import PlayerList from '@/components/PlayerList'
 import NightPhase from '@/components/NightPhase'
 import VotePanel from '@/components/VotePanel'
 import GameLog from '@/components/GameLog'
 import { exportGameTxt, exportGameJson } from '@/lib/exportGame'
-import { getAutoConfig } from '@/lib/autoConfig'
+import { ROLE_LABELS, ROLE_ICONS, GameEvent, NightAction, Vote, Player } from '@/types/game'
 import { motion, AnimatePresence } from 'framer-motion'
 
-type GameData = {
-  lobby: Lobby
-  players: Player[]
-  me: Player
-  events: GameEvent[]
-  votes: Vote[]
-  nightActions: NightAction[]
-  witchHealUsed: boolean
-  witchPoisonUsed: boolean
-  priestUsed: boolean
+function toGameEvents(rounds: RoundData[]): GameEvent[] {
+  const events: GameEvent[] = []
+  rounds.forEach(r => {
+    if (r.mayorElectedName) events.push({ id: `${r.round}-mayor`, lobbyCode: r.code, round: r.round, phase: 'mayor_election', eventType: 'mayor_elected', description: `${r.mayorElectedName} wurde zum Bürgermeister gewählt`, createdAt: r.timestamp })
+    r.deathNames.forEach((name, i) => events.push({ id: `${r.round}-death-${i}`, lobbyCode: r.code, round: r.round, phase: r.deaths[i] ? 'night' : 'night', eventType: 'death', description: `${name} starb`, createdAt: r.timestamp }))
+    if (r.healed && r.wolfTargetName) events.push({ id: `${r.round}-heal`, lobbyCode: r.code, round: r.round, phase: 'witch', eventType: 'heal', description: `Hexe heilte ${r.wolfTargetName}`, createdAt: r.timestamp })
+    if (r.poisonTargetName) events.push({ id: `${r.round}-poison`, lobbyCode: r.code, round: r.round, phase: 'witch', eventType: 'poison', description: `Hexe vergiftete ${r.poisonTargetName}`, createdAt: r.timestamp })
+    if (r.eliminatedName) events.push({ id: `${r.round}-elim`, lobbyCode: r.code, round: r.round, phase: 'day_vote', eventType: r.foolRevealed ? 'fool_revealed' : 'death', description: r.foolRevealed ? `${r.eliminatedName} ist der Dorfdepp – überlebt!` : `${r.eliminatedName} wurde eliminiert (${r.eliminatedRole})`, createdAt: r.timestamp })
+    if (r.winner) events.push({ id: `${r.round}-win`, lobbyCode: r.code, round: r.round, phase: 'end', eventType: 'win', description: r.winner, createdAt: r.timestamp })
+  })
+  return events
+}
+
+function toNightActions(state: GameState): NightAction[] {
+  return state.currentRound.nightActions.map((a, i) => ({
+    id: `na-${i}`, lobbyCode: state.code, round: state.round, phase: a.phase,
+    actorId: a.actorId, targetId: a.targetId ?? '',
+    action: a.action as NightAction['action'], createdAt: '',
+  }))
+}
+
+function toVotes(state: GameState, voteType: string): Vote[] {
+  return state.currentRound.votes
+    .filter(v => v.voteType === voteType)
+    .map((v, i) => ({
+      id: `v-${i}`, lobbyCode: state.code, round: state.round,
+      voteType: v.voteType as Vote['voteType'],
+      voterId: v.voterId, targetId: v.targetId, createdAt: '',
+    }))
+}
+
+function toPlayers(state: GameState): Player[] {
+  return state.players.map(p => ({
+    id: p.id, lobbyCode: state.code, userId: null, displayName: p.name,
+    role: p.role, isAlive: p.isAlive, isAdmin: p.isAdmin,
+    isMayor: p.isMayor, canVote: p.canVote, loverId: p.loverId,
+    priestBlessed: p.priestBlessed, joinedAt: '',
+  }))
 }
 
 export default function GamePage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params)
   const router = useRouter()
-  const [data, setData] = useState<GameData | null>(null)
+  const [gs, setGs] = useState<GameState | null>(null)
+  const [myId, setMyId] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [roleRevealed, setRoleRevealed] = useState(false)
   const [myVote, setMyVote] = useState<string | null>(null)
-  const [girlPeeked, setGirlPeeked] = useState(false)
-  const [hunterPending, setHunterPending] = useState(false)
-  const [mayorPending, setMayorPending] = useState(false)
-  const [winner, setWinner] = useState<string | null>(null)
   const [notification, setNotification] = useState<string | null>(null)
+  const [girlPeeked, setGirlPeeked] = useState(false)
+  const [peekResult, setPeekResult] = useState<{ wolves: string[]; caught: boolean } | null>(null)
+  const stateRef = useRef<GameState | null>(null)
 
-  function notify(msg: string, duration = 3000) {
+  function notify(msg: string) {
     setNotification(msg)
-    setTimeout(() => setNotification(null), duration)
+    setTimeout(() => setNotification(null), 3500)
   }
 
-  const loadAll = useCallback(async () => {
-    const myId = localStorage.getItem('werwolf_player_id')
-    if (!myId) { router.push('/'); return }
-
-    const [{ data: lobbyData }, { data: playersData }, { data: eventsData }, { data: votesData }, { data: actionsData }] =
-      await Promise.all([
-        supabase.from('lobbies').select('*').eq('code', code).single(),
-        supabase.from('players').select('*').eq('lobby_code', code).order('joined_at'),
-        supabase.from('game_events').select('*').eq('lobby_code', code).order('created_at'),
-        supabase.from('votes').select('*').eq('lobby_code', code),
-        supabase.from('night_actions').select('*').eq('lobby_code', code),
-      ])
-
-    if (!lobbyData || !playersData) return
-
-    const me = playersData.find(p => p.id === myId)
-    if (!me) { router.push('/'); return }
-
-    let witchHealUsed = false
-    let witchPoisonUsed = false
-    if (me.role === 'witch') {
-      const { data: ws } = await supabase.from('witch_status').select('*').eq('player_id', me.id).single()
-      witchHealUsed = ws?.heal_used ?? false
-      witchPoisonUsed = ws?.poison_used ?? false
-    }
-
-    const priestUsed = me.role === 'priest'
-      ? (actionsData ?? []).some(a => a.actor_id === me.id && a.action === 'bless')
-      : false
-
-    if (lobbyData.status === 'ended') {
-      setWinner((eventsData ?? []).findLast(e => e.event_type === 'win')?.description ?? 'Spiel beendet')
-    }
-
-    const currentVotes = (votesData ?? []).filter(
-      v => v.round === lobbyData.round &&
-        v.vote_type === (lobbyData.status === 'mayor_election' ? 'mayor_election' : 'day_elimination')
-    )
-    setMyVote(currentVotes.find(v => v.voter_id === myId)?.target_id ?? null)
-
-    setData({
-      lobby: mapLobby(lobbyData),
-      players: playersData.map(mapPlayer),
-      me: mapPlayer(me),
-      events: (eventsData ?? []).map(mapEvent),
-      votes: currentVotes.map(mapVote),
-      nightActions: (actionsData ?? [])
-        .filter(a => a.round === lobbyData.round)
-        .map(mapAction),
-      witchHealUsed,
-      witchPoisonUsed,
-      priestUsed,
-    })
-  }, [code, router])
+  function applyState(state: GameState) {
+    stateRef.current = state
+    setGs(state)
+  }
 
   useEffect(() => {
-    loadAll()
+    const me = loadMyPlayer(code)
+    if (!me) { router.push('/'); return }
+    setMyId(me.id)
+    setIsAdmin(me.isAdmin)
 
-    const channel = supabase
-      .channel(`game:${code}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lobbies', filter: `code=eq.${code}` }, loadAll)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `lobby_code=eq.${code}` }, loadAll)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'votes', filter: `lobby_code=eq.${code}` }, loadAll)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'night_actions', filter: `lobby_code=eq.${code}` }, loadAll)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_events', filter: `lobby_code=eq.${code}` }, ({ new: ev }) => {
-        if (ev.event_type === 'win') setWinner(ev.description)
-        if (ev.event_type === 'death') notify(`💀 ${ev.description}`)
-        if (ev.event_type === 'fool_revealed') notify(`🃏 ${ev.description}`)
-        if (ev.event_type === 'mayor_passed') notify(`👑 ${ev.description}`)
-        loadAll()
-      })
-      .subscribe()
+    const saved = loadGameState(code)
+    if (saved) applyState(saved)
+
+    const channel = subscribeToLobby(code, (msg: BroadcastMsg) => {
+      if (msg.type === 'game_state') {
+        applyState(msg.payload)
+        // Non-admin: check if vote already cast this round
+        const myVoteEntry = msg.payload.currentRound.votes.find(
+          v => v.voterId === me.id && (v.voteType === 'day_elimination' || v.voteType === 'mayor_election')
+        )
+        setMyVote(myVoteEntry?.targetId ?? null)
+      }
+      if (msg.type === 'request_sync' && me.isAdmin) {
+        const s = stateRef.current
+        if (s) broadcastGame(code, s)
+      }
+    })
 
     return () => { supabase.removeChannel(channel) }
-  }, [code, loadAll])
+  }, [code, router])
 
-  async function submitAction(action: string, targetId?: string) {
-    if (!data?.me) return
-    const res = await fetch('/api/game/action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code,
-        actorId: data.me.id,
-        targetId,
-        action,
-        phase: data.lobby.phase,
-      }),
-    })
-    const result = await res.json()
-    if (action === 'peek') return result
-    if (result.caught) notify('⚠️ Du wurdest fast erwischt!')
-    return result
+  // Admin: mutate state, broadcast, persist
+  function adminUpdate(newState: GameState) {
+    applyState(newState)
+    broadcastGame(code, newState)
   }
 
-  async function submitVote(targetId: string) {
-    if (!data?.me) return
-    const voteType = data.lobby.status === 'mayor_election' ? 'mayor_election' : 'day_elimination'
-    const res = await fetch('/api/vote', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, voterId: data.me.id, targetId, voteType }),
+  // ---- Night action (admin processes) ----
+  function submitNightAction(actorId: string, targetId: string | null, action: string) {
+    if (!gs || !isAdmin) return
+    const s = applyNightAction(gs, actorId, targetId, action, gs.phase ?? '')
+
+    if (action === 'peek') {
+      // Girl peek – handled locally
+      return
+    }
+
+    // Check if wolf phase is complete
+    if (gs.phase === 'wolf' && action === 'kill') {
+      const wolves = s.players.filter(p => p.role === 'werewolf' && p.isAlive)
+      const wolfVotes = s.currentRound.nightActions.filter(a => a.phase === 'wolf' && a.action === 'kill')
+      const allDone = wolves.every(w => wolfVotes.some(v => v.actorId === w.id))
+      if (!allDone) { adminUpdate(s); return }
+    }
+
+    // Single-actor phases: advance after action
+    if (['bless', 'heal', 'poison', 'reveal', 'link', 'skip'].includes(action) ||
+        (gs.phase === 'wolf' && action === 'kill')) {
+      const next = nextNightPhase(s)
+      if (next) {
+        adminUpdate(advanceToPhase(s, next))
+      } else {
+        // Resolve night
+        const resolved = resolveNight(s)
+        if (resolved.currentRound.deaths.length > 0) {
+          notify(`💀 ${resolved.currentRound.deathNames.join(', ')} gestorben`)
+        }
+        adminUpdate(resolved)
+      }
+    } else {
+      adminUpdate(s)
+    }
+  }
+
+  // ---- Vote (admin processes) ----
+  function submitVote(voterId: string, targetId: string, voteType: string) {
+    if (!gs || !isAdmin) return
+    const s = applyVote(gs, voterId, targetId, voteType)
+    const eligible = s.players.filter(p => p.isAlive && (voteType === 'mayor_election' || p.canVote))
+    const cast = s.currentRound.votes.filter(v => v.voteType === voteType)
+    if (cast.length >= eligible.length) {
+      const resolved = resolveVotes(s, voteType)
+      adminUpdate(resolved)
+    } else {
+      adminUpdate(s)
+    }
+  }
+
+  // ---- Non-admin: submit action via broadcast ----
+  function playerSubmitAction(action: string, targetId?: string) {
+    if (!myId || !gs) return Promise.resolve()
+    if (isAdmin) {
+      submitNightAction(myId, targetId ?? null, action)
+      return Promise.resolve()
+    }
+    // Non-admin sends to admin via broadcast
+    supabase.channel(`werwolf:${code}`).send({
+      type: 'broadcast', event: 'msg',
+      payload: { type: 'night_action', payload: { phase: gs.phase ?? '', actorId: myId, targetId: targetId ?? null, action } },
     })
-    const result = await res.json()
+    return Promise.resolve()
+  }
+
+  function playerSubmitVote(targetId: string) {
+    if (!myId || !gs) return Promise.resolve()
+    const voteType = gs.status === 'mayor_election' ? 'mayor_election' : 'day_elimination'
     setMyVote(targetId)
-    if (result.winner) setWinner(result.winner)
-    if (result.foolRevealed) notify('🃏 Dorfdepp aufgedeckt!')
-    if (result.hunterPending) setHunterPending(true)
-    if (result.mayorPending) setMayorPending(true)
-    if (result.mayorId) notify('👑 Bürgermeister gewählt!')
-  }
-
-  async function startVoting() {
-    await fetch('/api/game/mayor', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, action: 'start_vote' }),
+    if (isAdmin) {
+      submitVote(myId, targetId, voteType)
+      return Promise.resolve()
+    }
+    supabase.channel(`werwolf:${code}`).send({
+      type: 'broadcast', event: 'msg',
+      payload: { type: 'vote', payload: { voterId: myId, targetId, voteType } },
     })
+    return Promise.resolve()
   }
 
-  async function hunterShoot(targetId: string) {
-    await fetch('/api/game/mayor', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, action: 'hunter_shoot', hunterTargetId: targetId }),
+  // Admin handles broadcasts FROM players
+  useEffect(() => {
+    if (!isAdmin) return
+    const channel = subscribeToLobby(code, (msg: BroadcastMsg) => {
+      if (msg.type === 'night_action') {
+        const { actorId, targetId, action, phase } = msg.payload
+        const s = stateRef.current
+        if (!s || s.phase !== phase) return
+        submitNightAction(actorId, targetId, action)
+      }
+      if (msg.type === 'vote') {
+        const { voterId, targetId, voteType } = msg.payload
+        const s = stateRef.current
+        if (!s) return
+        submitVote(voterId, targetId, voteType)
+      }
     })
-    setHunterPending(false)
+    return () => { supabase.removeChannel(channel) }
+  }, [isAdmin, code]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!gs || !myId) {
+    return <main className="flex items-center justify-center min-h-dvh"><p className="text-gray-500">Lade Spiel...</p></main>
   }
 
-  async function mayorPassTitle(successorId: string) {
-    if (!data?.me) return
-    await fetch('/api/game/mayor', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, action: 'pass_title', mayorId: data.me.id, successorId }),
-    })
-    setMayorPending(false)
-  }
+  const me = gs.players.find(p => p.id === myId)
+  if (!me) return <main className="flex items-center justify-center min-h-dvh"><p className="text-gray-500">Spieler nicht gefunden</p></main>
 
-  async function tiebreakerVote(targetId: string) {
-    if (!data?.me) return
-    await fetch('/api/game/mayor', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, action: 'tiebreak', mayorId: data.me.id, successorId: targetId }),
-    })
-  }
-
-  if (!data) {
-    return (
-      <main className="flex items-center justify-center min-h-dvh">
-        <p className="text-gray-500">Lade Spiel...</p>
-      </main>
-    )
-  }
-
-  const { lobby, players, me, events, votes, nightActions, witchHealUsed, witchPoisonUsed, priestUsed } = data
+  const players = toPlayers(gs)
   const alivePlayers = players.filter(p => p.isAlive)
   const mayor = players.find(p => p.isMayor)
+  const voteType = gs.status === 'mayor_election' ? 'mayor_election' : 'day_elimination'
+  const currentVotes = toVotes(gs, voteType)
+  const nightActions = toNightActions(gs)
+  const allRounds = loadAllRounds(code)
+  const events = toGameEvents(allRounds)
 
-  // ---- WINNER SCREEN ----
-  if (winner !== null || lobby.status === 'ended') {
-    const winnerLabel = winner === 'village' || winner?.includes('Dorf') ? 'DORF' : winner === 'wolves' || winner?.includes('Wolf') ? 'WERWÖLFE' : 'LIEBESPAAR'
+  // ---- WINNER ----
+  if (gs.winner || gs.status === 'ended') {
+    const w = gs.winner
+    const winnerLabel = w === 'village' ? 'DORF' : w === 'wolves' ? 'WERWÖLFE' : 'LIEBESPAAR'
     const winnerEmoji = winnerLabel === 'WERWÖLFE' ? '🐺' : winnerLabel === 'LIEBESPAAR' ? '💘' : '🏡'
     return (
       <main className="min-h-dvh px-4 py-8 max-w-sm mx-auto space-y-6">
         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-center space-y-3">
           <div className="text-7xl">{winnerEmoji}</div>
           <h1 className="text-3xl font-bold text-white">{winnerLabel} GEWINNT!</h1>
+          <p className="text-gray-400 text-sm">nach {gs.round} Runden</p>
         </motion.div>
-
         <div className="space-y-2">
           <p className="text-gray-400 text-xs uppercase tracking-wider">Alle Rollen</p>
-          <PlayerList players={players} myId={me.id} showRoles />
+          <PlayerList players={players} myId={myId} showRoles />
         </div>
-
         <GameLog events={events} />
-
         <div className="space-y-2">
           <button
-            onClick={() => exportGameTxt(code, players, events, winner, lobby.round, mayor?.displayName ?? null, lobby.settings.votesVisible)}
+            onClick={() => exportGameTxt(code, players, events, w, gs.round, mayor?.displayName ?? null, gs.settings.votesVisible)}
             className="w-full py-3 bg-white/10 border border-white/20 rounded-xl text-white font-semibold active:scale-95"
-          >
-            📄 Als .txt exportieren
-          </button>
+          >📄 Als .txt exportieren</button>
           <button
-            onClick={() => exportGameJson(code, players, events, winner, lobby.round)}
+            onClick={() => exportGameJson(code, players, events, w, gs.round)}
             className="w-full py-3 bg-white/10 border border-white/20 rounded-xl text-white font-semibold active:scale-95"
-          >
-            📋 Als .json exportieren
-          </button>
-          <button
-            onClick={() => router.push('/')}
-            className="w-full py-3 bg-white text-gray-900 rounded-xl font-bold active:scale-95"
-          >
+          >📋 Als .json exportieren</button>
+          <button onClick={() => router.push('/')} className="w-full py-3 bg-white text-gray-900 rounded-xl font-bold active:scale-95">
             Neues Spiel
           </button>
         </div>
@@ -247,11 +269,8 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   if (!roleRevealed) {
     return (
       <main className="min-h-dvh px-4 py-8 max-w-sm mx-auto flex flex-col items-center justify-center space-y-6">
-        <RoleCard role={me.role!} playerName={me.displayName} isMayor={me.isMayor} />
-        <button
-          onClick={() => setRoleRevealed(true)}
-          className="w-full py-4 bg-white text-gray-900 rounded-2xl font-bold text-base active:scale-95 transition-all"
-        >
+        <RoleCard role={me.role!} playerName={me.name} isMayor={me.isMayor} />
+        <button onClick={() => setRoleRevealed(true)} className="w-full py-4 bg-white text-gray-900 rounded-2xl font-bold text-base active:scale-95 transition-all">
           Verstanden →
         </button>
       </main>
@@ -259,38 +278,44 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   }
 
   // ---- HUNTER PENDING ----
-  if (hunterPending && me.role === 'hunter') {
+  if (gs.status === 'hunter_pending' && me.role === 'hunter') {
     return (
       <main className="min-h-dvh px-4 py-8 max-w-sm mx-auto space-y-5">
         <div className="text-center space-y-2">
           <div className="text-5xl">🔫</div>
           <h2 className="text-2xl font-bold text-white">Du stirbst!</h2>
-          <p className="text-gray-400 text-sm">Aber du schießt noch – wen nimmst du mit?</p>
+          <p className="text-gray-400 text-sm">Wen nimmst du mit?</p>
         </div>
         <PlayerList
-          players={alivePlayers.filter(p => p.id !== me.id)}
-          myId={me.id}
+          players={alivePlayers.filter(p => p.id !== myId)}
+          myId={myId}
           selectable
-          onSelect={hunterShoot}
+          onSelect={id => {
+            if (!gs || !isAdmin) return
+            adminUpdate(hunterShoot(gs, id))
+          }}
         />
       </main>
     )
   }
 
-  // ---- MAYOR PASSING TITLE ----
-  if (mayorPending && me.isMayor) {
+  // ---- MAYOR PENDING ----
+  if (gs.status === 'mayor_pending' && me.isMayor) {
     return (
       <main className="min-h-dvh px-4 py-8 max-w-sm mx-auto space-y-5">
         <div className="text-center space-y-2">
           <div className="text-5xl">👑</div>
           <h2 className="text-2xl font-bold text-white">Übergib den Titel</h2>
-          <p className="text-gray-400 text-sm">Wähle deinen Nachfolger als Bürgermeister</p>
+          <p className="text-gray-400 text-sm">Wähle deinen Nachfolger</p>
         </div>
         <PlayerList
-          players={alivePlayers.filter(p => p.id !== me.id)}
-          myId={me.id}
+          players={alivePlayers.filter(p => p.id !== myId)}
+          myId={myId}
           selectable
-          onSelect={mayorPassTitle}
+          onSelect={id => {
+            if (!gs || !isAdmin) return
+            adminUpdate(mayorPassTitle(gs, id))
+          }}
         />
       </main>
     )
@@ -299,13 +324,10 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   return (
     <main className="min-h-dvh px-4 py-5 max-w-sm mx-auto space-y-4">
 
-      {/* Notification */}
       <AnimatePresence>
         {notification && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
             className="fixed top-4 left-4 right-4 max-w-sm mx-auto bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm text-center z-50 shadow-xl"
           >
             {notification}
@@ -317,94 +339,99 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
       <div className="flex items-center justify-between">
         <div>
           <p className="text-gray-500 text-xs uppercase tracking-wider">
-            {lobby.status === 'night' ? '🌙 Nacht' :
-             lobby.status === 'day_discussion' ? '☀️ Tag – Diskussion' :
-             lobby.status === 'day_vote' ? '🗳️ Abstimmung' :
-             lobby.status === 'mayor_election' ? '👑 Bürgermeisterwahl' :
-             lobby.status === 'tiebreaker' ? '⚖️ Gleichstand' : ''}
+            {gs.status === 'night' ? '🌙 Nacht' :
+             gs.status === 'day_discussion' ? '☀️ Diskussion' :
+             gs.status === 'day_vote' ? '🗳️ Abstimmung' :
+             gs.status === 'mayor_election' ? '👑 Bürgermeisterwahl' :
+             gs.status === 'tiebreaker' ? '⚖️ Gleichstand' : ''}
           </p>
-          <p className="text-gray-400 text-xs">Runde {lobby.round}</p>
+          <p className="text-gray-400 text-xs">Runde {gs.round}</p>
         </div>
         <div className="text-right">
           <p className="text-white text-sm font-medium flex items-center gap-1 justify-end">
             {me.isMayor && '👑'}
-            {ROLE_ICONS[me.role!]} {ROLE_LABELS[me.role!]}
+            {me.role && ROLE_ICONS[me.role]} {me.role && ROLE_LABELS[me.role]}
           </p>
           <p className="text-gray-500 text-xs">{alivePlayers.length} am Leben</p>
         </div>
       </div>
 
-      {/* Mayor election */}
-      {lobby.status === 'mayor_election' && (
+      {/* Bürgermeisterwahl */}
+      {gs.status === 'mayor_election' && (
         <VotePanel
-          players={players}
-          myId={me.id}
-          votes={votes}
-          votesVisible
-          voteType="mayor_election"
-          onVote={submitVote}
-          myVote={myVote}
+          players={players} myId={myId} votes={currentVotes} votesVisible
+          voteType="mayor_election" onVote={playerSubmitVote} myVote={myVote}
         />
       )}
 
-      {/* Night */}
-      {lobby.status === 'night' && lobby.phase && (
+      {/* Nacht */}
+      {gs.status === 'night' && gs.phase && (
         <div className="bg-indigo-950/30 border border-indigo-900/50 rounded-2xl p-4">
           <NightPhase
-            phase={lobby.phase}
-            myRole={me.role!}
-            myId={me.id}
+            phase={gs.phase} myRole={me.role!} myId={myId}
             players={players}
-            wolfTarget={null}
-            witchHealUsed={witchHealUsed}
-            witchPoisonUsed={witchPoisonUsed}
-            priestUsed={priestUsed}
+            wolfTarget={gs.currentRound.wolfTarget}
+            witchHealUsed={gs.witchHealUsed}
+            witchPoisonUsed={gs.witchPoisonUsed}
+            priestUsed={gs.priestUsed}
             girlPeeked={girlPeeked}
             nightActions={nightActions}
             onAction={async (action, targetId) => {
-              if (action === 'peek') setGirlPeeked(true)
-              return submitAction(action, targetId)
+              if (action === 'peek') {
+                setGirlPeeked(true)
+                const wolves = gs.players.filter(p => p.role === 'werewolf' && p.isAlive).map(p => p.name)
+                const caught = Math.random() < 0.4
+                const result = { wolves, caught }
+                setPeekResult(result)
+                if (caught && isAdmin) {
+                  notify('⚠️ Das Mädchen wurde erwischt! Wölfe können Ziel wechseln.')
+                }
+                return result
+              }
+              playerSubmitAction(action, targetId)
             }}
           />
+          {peekResult && me.role === 'girl' && (
+            <div className="mt-3 bg-teal-950/50 border border-teal-700 rounded-xl p-3 text-center space-y-1">
+              <p className="text-teal-300 text-sm font-semibold">Die Wölfe sind:</p>
+              {peekResult.wolves.map(n => <p key={n} className="text-white font-bold">{n}</p>)}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Day discussion */}
-      {lobby.status === 'day_discussion' && (
+      {/* Tag – Diskussion */}
+      {gs.status === 'day_discussion' && (
         <div className="space-y-4">
           <div className="bg-yellow-950/20 border border-yellow-900/40 rounded-2xl p-4 text-center space-y-2">
             <p className="text-yellow-300 font-semibold">Diskutiert!</p>
-            <p className="text-gray-400 text-sm">Redet über die letzte Nacht...</p>
+            {gs.currentRound.deathNames.length > 0 && (
+              <p className="text-gray-400 text-sm">Letzte Nacht gestorben: {gs.currentRound.deathNames.join(', ')}</p>
+            )}
           </div>
-          {me.isAdmin && (
+          {isAdmin && (
             <button
-              onClick={startVoting}
+              onClick={() => adminUpdate({ ...gs, status: 'day_vote' })}
               className="w-full py-4 bg-orange-600 rounded-2xl text-white font-bold active:scale-95 transition-all"
             >
               🗳️ Abstimmung starten
             </button>
           )}
-          {!me.isAdmin && (
-            <p className="text-center text-gray-500 text-sm">Warte auf den Admin...</p>
-          )}
+          {!isAdmin && <p className="text-center text-gray-500 text-sm">Warte auf den Admin...</p>}
         </div>
       )}
 
-      {/* Day vote */}
-      {lobby.status === 'day_vote' && (
+      {/* Abstimmung */}
+      {gs.status === 'day_vote' && (
         <VotePanel
-          players={players}
-          myId={me.id}
-          votes={votes}
-          votesVisible={lobby.settings.votesVisible}
-          voteType="day_elimination"
-          onVote={submitVote}
-          myVote={myVote}
+          players={players} myId={myId} votes={currentVotes}
+          votesVisible={gs.settings.votesVisible}
+          voteType="day_elimination" onVote={playerSubmitVote} myVote={myVote}
         />
       )}
 
       {/* Tiebreaker */}
-      {lobby.status === 'tiebreaker' && (
+      {gs.status === 'tiebreaker' && (
         <div className="space-y-4">
           <div className="bg-orange-950/30 border border-orange-800/50 rounded-2xl p-4 text-center">
             <p className="text-orange-300 font-semibold">⚖️ Gleichstand!</p>
@@ -412,97 +439,24 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
               {me.isMayor ? 'Du entscheidest als Bürgermeister.' : `${mayor?.displayName ?? 'Bürgermeister'} entscheidet...`}
             </p>
           </div>
-          {me.isMayor && (
+          {me.isMayor && isAdmin && (
             <PlayerList
-              players={alivePlayers.filter(p => p.id !== me.id)}
-              myId={me.id}
-              selectable
-              onSelect={tiebreakerVote}
+              players={alivePlayers.filter(p => p.id !== myId)}
+              myId={myId} selectable
+              onSelect={id => adminUpdate(eliminatePlayer(gs, id, 'tiebreaker'))}
             />
           )}
         </div>
       )}
 
-      {/* Player overview (always shown) */}
+      {/* Spielerliste */}
       <div className="space-y-2">
         <p className="text-gray-500 text-xs uppercase tracking-wider">Spieler</p>
-        <PlayerList players={players} myId={me.id} />
+        <PlayerList players={players} myId={myId} />
       </div>
 
-      {/* Log */}
       {events.length > 0 && <GameLog events={events} />}
 
     </main>
   )
-}
-
-function mapLobby(d: Record<string, unknown>): Lobby {
-  return {
-    code: d.code as string,
-    adminId: d.admin_id as string,
-    status: d.status as Lobby['status'],
-    phase: d.phase as Lobby['phase'],
-    round: d.round as number,
-    config: (d.config as Lobby['config']) ?? getAutoConfig(5),
-    settings: {
-      votesVisible: (d.votes_visible as boolean) ?? true,
-      mayorEnabled: (d.mayor_enabled as boolean) ?? true,
-      autoConfig: (d.auto_config as boolean) ?? false,
-    },
-    createdAt: d.created_at as string,
-  }
-}
-
-function mapPlayer(d: Record<string, unknown>): Player {
-  return {
-    id: d.id as string,
-    lobbyCode: d.lobby_code as string,
-    userId: d.user_id as string | null,
-    displayName: d.display_name as string,
-    role: d.role as Player['role'],
-    isAlive: d.is_alive as boolean,
-    isAdmin: d.is_admin as boolean,
-    isMayor: d.is_mayor as boolean,
-    canVote: d.can_vote as boolean,
-    loverId: d.lover_id as string | null,
-    priestBlessed: d.priest_blessed as boolean,
-    joinedAt: d.joined_at as string,
-  }
-}
-
-function mapEvent(d: Record<string, unknown>): GameEvent {
-  return {
-    id: d.id as string,
-    lobbyCode: d.lobby_code as string,
-    round: d.round as number,
-    phase: d.phase as string,
-    eventType: d.event_type as GameEvent['eventType'],
-    description: d.description as string,
-    createdAt: d.created_at as string,
-  }
-}
-
-function mapVote(d: Record<string, unknown>): Vote {
-  return {
-    id: d.id as string,
-    lobbyCode: d.lobby_code as string,
-    round: d.round as number,
-    voteType: d.vote_type as Vote['voteType'],
-    voterId: d.voter_id as string,
-    targetId: d.target_id as string,
-    createdAt: d.created_at as string,
-  }
-}
-
-function mapAction(d: Record<string, unknown>): NightAction {
-  return {
-    id: d.id as string,
-    lobbyCode: d.lobby_code as string,
-    round: d.round as number,
-    phase: d.phase as string,
-    actorId: d.actor_id as string,
-    targetId: d.target_id as string,
-    action: d.action as NightAction['action'],
-    createdAt: d.created_at as string,
-  }
 }

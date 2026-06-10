@@ -2,7 +2,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { generateGuestName } from '@/lib/roleAssignment'
+import { generateGuestName, generateLobbyCode } from '@/lib/roleAssignment'
+import { saveName, loadName, saveLobby, saveMyPlayer } from '@/lib/storage'
+import { getAutoConfig, getTotalRoles } from '@/lib/autoConfig'
+import { subscribeToLobby, BroadcastMsg } from '@/lib/broadcast'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 
 export default function HomePage() {
   const router = useRouter()
@@ -13,25 +17,20 @@ export default function HomePage() {
   const [user, setUser] = useState<{ id: string; email?: string; name?: string } | null>(null)
 
   useEffect(() => {
-    const cached = localStorage.getItem('werwolf_name')
-    if (cached) setName(cached)
-    else setName(generateGuestName())
-
+    const cached = loadName()
+    setName(cached || generateGuestName())
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
-        setUser({
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.user_metadata?.full_name ?? data.user.email,
-        })
-        setName(data.user.user_metadata?.full_name ?? data.user.email ?? '')
+        const n = data.user.user_metadata?.full_name ?? data.user.email ?? ''
+        setUser({ id: data.user.id, email: data.user.email, name: n })
+        if (!loadName()) setName(n)
       }
     })
   }, [])
 
-  function saveName(n: string) {
+  function handleNameChange(n: string) {
     setName(n)
-    localStorage.setItem('werwolf_name', n)
+    saveName(n)
   }
 
   async function loginWithGoogle() {
@@ -52,25 +51,18 @@ export default function HomePage() {
     if (!name.trim()) return
     setLoading('create')
     setError('')
-    try {
-      const res = await fetch('/api/lobby', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create',
-          displayName: name.trim(),
-          userId: user?.id,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error); setLoading(null); return }
-      localStorage.setItem('werwolf_player_id', data.player.id)
-      localStorage.setItem('werwolf_name', name.trim())
-      router.push(`/lobby/${data.code}`)
-    } catch {
-      setError('Verbindungsfehler')
-      setLoading(null)
-    }
+    const code = generateLobbyCode()
+    const playerId = crypto.randomUUID()
+    const playerName = name.trim()
+
+    const config = getAutoConfig(1)
+    const settings = { votesVisible: true, mayorEnabled: true, autoConfig: false }
+
+    saveLobby({ code, config, settings, players: [{ id: playerId, name: playerName, isAdmin: true }] })
+    saveMyPlayer(code, { id: playerId, name: playerName, isAdmin: true })
+    saveName(playerName)
+
+    router.push(`/lobby/${code}`)
   }
 
   async function joinLobby() {
@@ -78,49 +70,65 @@ export default function HomePage() {
     if (!code || !name.trim()) return
     setLoading('join')
     setError('')
-    try {
-      const res = await fetch('/api/lobby', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'join',
-          code,
-          displayName: name.trim(),
-          userId: user?.id,
-        }),
+
+    const playerId = crypto.randomUUID()
+    const playerName = name.trim()
+
+    // Subscribe and wait for lobby_state from admin
+    let channel: RealtimeChannel | null = null
+    let resolved = false
+
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true
+        channel?.unsubscribe()
+        setError('Keine Lobby mit diesem Code gefunden')
+        setLoading(null)
+      }
+    }, 8000)
+
+    channel = subscribeToLobby(code, (msg: BroadcastMsg) => {
+      if (resolved) return
+      if (msg.type === 'lobby_state') {
+        resolved = true
+        clearTimeout(timeout)
+        channel?.unsubscribe()
+
+        const lobby = msg.payload
+        const updatedPlayers = [...lobby.players, { id: playerId, name: playerName, isAdmin: false }]
+        saveLobby({ ...lobby, players: updatedPlayers })
+        saveMyPlayer(code, { id: playerId, name: playerName, isAdmin: false })
+        saveName(playerName)
+        router.push(`/lobby/${code}`)
+      }
+    })
+
+    // Ask admin to send current state
+    setTimeout(() => {
+      supabase.channel(`werwolf:${code}`).send({
+        type: 'broadcast', event: 'msg',
+        payload: { type: 'request_sync' },
       })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error); setLoading(null); return }
-      localStorage.setItem('werwolf_player_id', data.player.id)
-      localStorage.setItem('werwolf_name', name.trim())
-      router.push(`/lobby/${code}`)
-    } catch {
-      setError('Verbindungsfehler')
-      setLoading(null)
-    }
+    }, 500)
   }
 
   return (
     <main className="flex flex-col items-center justify-center min-h-dvh px-4 py-8">
       <div className="w-full max-w-sm space-y-6">
 
-        {/* Header */}
         <div className="text-center space-y-2">
           <div className="text-6xl">🐺</div>
           <h1 className="text-4xl font-bold text-white tracking-tight">WERWOLF</h1>
           <p className="text-gray-500 text-sm">Das Dorf erwacht. Wer ist der Wolf?</p>
         </div>
 
-        {/* Auth */}
         {user ? (
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
             <div>
               <p className="text-white text-sm font-medium">{user.name}</p>
               <p className="text-gray-500 text-xs">{user.email}</p>
             </div>
-            <button onClick={logout} className="text-gray-400 text-xs hover:text-white transition-colors">
-              Abmelden
-            </button>
+            <button onClick={logout} className="text-gray-400 text-xs hover:text-white transition-colors">Abmelden</button>
           </div>
         ) : (
           <button
@@ -138,12 +146,11 @@ export default function HomePage() {
           </button>
         )}
 
-        {/* Name */}
         <div className="space-y-1.5">
           <label className="text-gray-400 text-xs uppercase tracking-wider">Dein Name</label>
           <input
             value={name}
-            onChange={e => saveName(e.target.value)}
+            onChange={e => handleNameChange(e.target.value)}
             placeholder="Name eingeben..."
             maxLength={20}
             className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-white/40 transition-colors"
@@ -156,7 +163,6 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Actions */}
         <div className="space-y-3">
           <button
             onClick={createLobby}
@@ -165,7 +171,6 @@ export default function HomePage() {
           >
             {loading === 'create' ? 'Erstelle...' : 'Lobby erstellen'}
           </button>
-
           <div className="flex gap-2">
             <input
               value={joinCode}
