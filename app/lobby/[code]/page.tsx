@@ -53,6 +53,15 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
         const l = loadLobby(code)
         if (l) broadcastLobby(code, l)
       }
+      if (msg.type === 'player_joined' && me.isAdmin) {
+        const { id, name } = msg.payload
+        const l = loadLobby(code)
+        if (!l || l.players.some(p => p.id === id)) return
+        const updated: LobbyState = { ...l, players: [...l.players, { id, name, isAdmin: false }] }
+        saveLobby(updated)
+        setLobby(updated)
+        broadcastLobby(code, updated)
+      }
       if (msg.type === 'kicked' && msg.payload.playerId === me.id) {
         router.push('/?kicked=1')
       }
@@ -61,14 +70,19 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
       }
     })
 
+    // Non-admin: announce arrival so admin can add us to the lobby
+    if (!me.isAdmin) {
+      setTimeout(() => {
+        supabase.channel(`werwolf:${code}`).send({
+          type: 'broadcast', event: 'msg',
+          payload: { type: 'player_joined', payload: { id: me.id, name: me.name } },
+        })
+      }, 400)
+    }
+
     return () => { supabase.removeChannel(channel) }
   }, [code, router, refreshLobby])
 
-  // Admin: when a new player joins, update lobby and broadcast
-  useEffect(() => {
-    if (!isAdmin || !lobby) return
-    broadcastLobby(code, lobby)
-  }, [lobby?.players.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateLobbyConfig(config: RoleConfig, settings: LobbyState['settings']) {
     if (!lobby) return

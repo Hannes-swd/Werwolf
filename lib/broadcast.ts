@@ -5,6 +5,7 @@ export type BroadcastMsg =
   | { type: 'lobby_state'; payload: LobbyState }
   | { type: 'game_state'; payload: GameState }
   | { type: 'request_sync' }
+  | { type: 'player_joined'; payload: { id: string; name: string } }
   | { type: 'night_action'; payload: { phase: string; actorId: string; targetId: string | null; action: string } }
   | { type: 'vote'; payload: { voterId: string; targetId: string; voteType: string } }
   | { type: 'girl_peek_result'; payload: { requesterId: string; wolves: string[]; caught: boolean } }
