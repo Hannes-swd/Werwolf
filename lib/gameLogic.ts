@@ -64,7 +64,7 @@ export function getEliminationTarget(votes: Vote[]): string | null {
   }
 
   if (topTargets.length === 1) return topTargets[0]
-  return null // Gleichstand
+  return null // A tie must be resolved by the configured decision maker.
 }
 
 export function checkWinCondition(players: Player[]): 'village' | 'wolves' | 'lovers' | null {
@@ -72,7 +72,7 @@ export function checkWinCondition(players: Player[]): 'village' | 'wolves' | 'lo
   const aliveWolves = alive.filter(p => p.role === 'werewolf')
   const aliveVillage = alive.filter(p => p.role !== 'werewolf')
 
-  // Liebespaar gewinnt wenn sie die letzten zwei sind
+  // The lovers win when they are the final pair.
   const lovers = alive.filter(p => p.loverId !== null)
   if (alive.length === 2 && lovers.length === 2 && lovers[0].loverId === lovers[1].id) {
     return 'lovers'

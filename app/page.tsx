@@ -1,162 +1,107 @@
-'use client'
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { generateGuestName, generateLobbyCode } from '@/lib/roleAssignment'
-import { saveName, loadName, saveLobby, saveMyPlayer } from '@/lib/storage'
-import { getAutoConfig } from '@/lib/autoConfig'
-import { subscribeToLobby, BroadcastMsg } from '@/lib/broadcast'
-import { supabase } from '@/lib/supabase'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { Metadata } from 'next'
+import HomePageClient from './HomePageClient'
+import { DEFAULT_LOCALE, translate } from '@/lib/i18n/translations'
+import { resolveSiteUrl } from '@/lib/site-url'
 
-export default function HomePage() {
-  const router = useRouter()
-  const [name, setName] = useState('')
-  const [joinCode, setJoinCode] = useState('')
-  const [loading, setLoading] = useState<'create' | 'join' | null>(null)
-  const [error, setError] = useState('')
+const title = translate(DEFAULT_LOCALE, 'metadata.title')
+const description = translate(DEFAULT_LOCALE, 'metadata.description')
 
-  useEffect(() => {
-    const cached = loadName()
-    setName(cached || generateGuestName())
+export const metadata: Metadata = {
+  title: { absolute: title },
+  description,
+  alternates: {
+    canonical: '/',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      noimageindex: false,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
+  },
+  openGraph: {
+    type: 'website',
+    url: '/',
+    title,
+    description,
+    siteName: title,
+    locale: 'en_US',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title,
+    description,
+  },
+}
 
-    const params = new URLSearchParams(window.location.search)
-    const invite = params.get('join')
-    if (invite) setJoinCode(invite.toUpperCase())
-
-    if (params.get('kicked')) setError('Du wurdest aus der Lobby entfernt.')
-    else if (params.get('closed')) setError('Die Lobby wurde geschlossen.')
-
-    // Clean URL params
-    if (params.toString()) window.history.replaceState({}, '', '/')
-  }, [])
-
-  function handleNameChange(n: string) {
-    setName(n)
-    saveName(n)
-  }
-
-  async function createLobby() {
-    if (!name.trim()) return
-    setLoading('create')
-    setError('')
-    const code = generateLobbyCode()
-    const playerId = crypto.randomUUID()
-    const playerName = name.trim()
-
-    const config = getAutoConfig(1)
-    const settings = { votesVisible: true, mayorEnabled: true, autoConfig: false }
-
-    saveLobby({ code, config, settings, players: [{ id: playerId, name: playerName, isAdmin: true }] })
-    saveMyPlayer(code, { id: playerId, name: playerName, isAdmin: true })
-    saveName(playerName)
-
-    router.push(`/lobby/${code}`)
-  }
-
-  async function joinLobby() {
-    const code = joinCode.trim().toUpperCase()
-    if (!code || !name.trim()) return
-    setLoading('join')
-    setError('')
-
-    const playerId = crypto.randomUUID()
-    const playerName = name.trim()
-
-    let channel: RealtimeChannel | null = null
-    let resolved = false
-
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true
-        channel?.unsubscribe()
-        setError('Keine Lobby mit diesem Code gefunden')
-        setLoading(null)
-      }
-    }, 8000)
-
-    channel = subscribeToLobby(code, (msg: BroadcastMsg) => {
-      if (resolved) return
-      if (msg.type === 'lobby_state') {
-        resolved = true
-        clearTimeout(timeout)
-        channel?.unsubscribe()
-
-        const lobby = msg.payload
-        // Admin may have already added this player via request_sync — don't duplicate
-        const alreadyAdded = lobby.players.some(p => p.id === playerId)
-        const updatedPlayers = alreadyAdded
-          ? lobby.players
-          : [...lobby.players, { id: playerId, name: playerName, isAdmin: false }]
-        saveLobby({ ...lobby, players: updatedPlayers })
-        saveMyPlayer(code, { id: playerId, name: playerName, isAdmin: false })
-        saveName(playerName)
-        router.push(`/lobby/${code}`)
-      }
-    })
-
-    setTimeout(() => {
-      supabase.channel(`werwolf:${code}`).send({
-        type: 'broadcast', event: 'msg',
-        payload: { type: 'request_sync', payload: { joiningPlayer: { id: playerId, name: playerName } } },
-      })
-    }, 500)
+function StructuredData() {
+  const siteUrl = resolveSiteUrl().href
+  const supportedLanguages = ['en', 'de', 'es', 'fr', 'it', 'pt', 'zh-CN', 'ja', 'ko', 'ar']
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebSite',
+        '@id': `${siteUrl}#website`,
+        url: siteUrl,
+        name: title,
+        description,
+        inLanguage: supportedLanguages,
+      },
+      {
+        '@type': 'WebApplication',
+        '@id': `${siteUrl}#application`,
+        url: siteUrl,
+        name: title,
+        description,
+        applicationCategory: 'GameApplication',
+        operatingSystem: 'Any',
+        browserRequirements: 'Requires JavaScript and a modern web browser.',
+        isAccessibleForFree: true,
+        inLanguage: supportedLanguages,
+        genre: ['Party game', 'Social deduction game'],
+        offers: {
+          '@type': 'Offer',
+          price: '0',
+          priceCurrency: 'USD',
+        },
+      },
+    ],
   }
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-dvh px-4 py-8">
-      <div className="w-full max-w-sm space-y-6">
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{
+        __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c'),
+      }}
+    />
+  )
+}
 
-        <div className="text-center space-y-2">
-          <div className="text-6xl">🐺</div>
-          <h1 className="text-4xl font-bold text-white tracking-tight">WERWOLF</h1>
-          <p className="text-gray-500 text-sm">Das Dorf erwacht. Wer ist der Wolf?</p>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-gray-400 text-xs uppercase tracking-wider">Dein Name</label>
-          <input
-            value={name}
-            onChange={e => handleNameChange(e.target.value)}
-            placeholder="Name eingeben..."
-            maxLength={20}
-            className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-white/40 transition-colors"
-          />
-        </div>
-
-        {error && (
-          <div className="bg-red-950/50 border border-red-800 rounded-xl px-4 py-3 text-red-300 text-sm text-center">
-            {error}
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <button
-            onClick={createLobby}
-            disabled={!name.trim() || !!loading}
-            className="w-full py-4 bg-white text-gray-900 rounded-2xl font-bold text-base active:scale-95 transition-all disabled:opacity-50"
-          >
-            {loading === 'create' ? 'Erstelle...' : 'Lobby erstellen'}
-          </button>
-
-          <div className="flex gap-2">
-            <input
-              value={joinCode}
-              onChange={e => setJoinCode(e.target.value.toUpperCase())}
-              placeholder="Code (z.B. WR7X2K)"
-              maxLength={6}
-              className="flex-1 bg-white/5 border border-white/15 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-white/40 transition-colors uppercase tracking-widest text-center"
-            />
-            <button
-              onClick={joinLobby}
-              disabled={!joinCode.trim() || !name.trim() || !!loading}
-              className="px-5 py-3 bg-white/10 border border-white/20 rounded-xl text-white font-semibold active:scale-95 transition-all disabled:opacity-50"
-            >
-              {loading === 'join' ? '...' : '→'}
-            </button>
-          </div>
-        </div>
-
-      </div>
-    </main>
+export default function HomePage() {
+  return (
+    <>
+      <StructuredData />
+      <HomePageClient />
+      <noscript>
+        <section className="ww-noscript" aria-labelledby="no-script-title">
+          <h2 id="no-script-title">Play Werewolf together in your browser</h2>
+          <p>
+            Create a private lobby, share its six-character code, and guide your group through the
+            classic social deduction game. No account or installation is needed.
+          </p>
+          <p>
+            JavaScript is required for live rooms, private roles, voting, and realtime updates.
+            Enable it, then reload this page to start a game.
+          </p>
+        </section>
+      </noscript>
+    </>
   )
 }

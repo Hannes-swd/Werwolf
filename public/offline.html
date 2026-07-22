@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f6f7f9" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Offline · Werewolf</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        display: grid;
+        min-height: 100dvh;
+        place-items: center;
+        margin: 0;
+        background: radial-gradient(circle at 75% 12%, #e4edff, transparent 38rem), #f6f7f9;
+        padding: max(1.25rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right)) max(1.25rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+        color: #17191d;
+      }
+
+      main {
+        width: min(100%, 28rem);
+        border: 1px solid #d7dce5;
+        border-radius: 1.35rem;
+        background: rgb(255 255 255 / 0.94);
+        padding: clamp(1.5rem, 6vw, 2.25rem);
+        box-shadow: 0 24px 70px rgb(35 48 74 / 0.12);
+        text-align: center;
+      }
+
+      img {
+        width: 5rem;
+        height: 5rem;
+        border-radius: 1.25rem;
+      }
+
+      h1 {
+        margin: 1.25rem 0 0;
+        font-size: clamp(2rem, 8vw, 2.75rem);
+        letter-spacing: -0.05em;
+        line-height: 1;
+      }
+
+      p {
+        margin: 1rem auto 0;
+        color: #667085;
+        line-height: 1.55;
+      }
+
+      a {
+        display: inline-flex;
+        min-height: 3rem;
+        align-items: center;
+        justify-content: center;
+        margin-top: 1.5rem;
+        border: 1px solid #3567d2;
+        border-radius: 0.85rem;
+        background: linear-gradient(180deg, #4d7ce3, #315fca);
+        padding: 0.8rem 1.2rem;
+        color: #fff;
+        font-weight: 650;
+        text-decoration: none;
+      }
+
+      a:focus-visible {
+        outline: 3px solid rgb(53 105 220 / 0.3);
+        outline-offset: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icons/icon-192.png" alt="" width="80" height="80" />
+      <h1>You’re offline</h1>
+      <p>Werewolf needs a connection to sync the room. Reconnect, then try again.</p>
+      <a href="/">Try again</a>
+    </main>
+  </body>
+</html>

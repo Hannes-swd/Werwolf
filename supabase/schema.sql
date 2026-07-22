@@ -1,7 +1,7 @@
--- Enable UUID extension
+-- Enable UUID generation for server-owned records.
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Lobbys
+-- Lobbies
 CREATE TABLE lobbies (
   code            TEXT PRIMARY KEY,
   admin_id        UUID NOT NULL,
@@ -15,7 +15,7 @@ CREATE TABLE lobbies (
   created_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- Spieler
+-- Players
 CREATE TABLE players (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   lobby_code      TEXT REFERENCES lobbies(code) ON DELETE CASCADE,
@@ -31,7 +31,7 @@ CREATE TABLE players (
   joined_at       TIMESTAMPTZ DEFAULT now()
 );
 
--- Nacht-Aktionen
+-- Night actions
 CREATE TABLE night_actions (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   lobby_code      TEXT REFERENCES lobbies(code) ON DELETE CASCADE,
@@ -43,7 +43,7 @@ CREATE TABLE night_actions (
   created_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- Votes (Bürgermeisterwahl + Tagesvote + Tiebreaker)
+-- Votes for elections, eliminations, and tie breakers
 CREATE TABLE votes (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   lobby_code      TEXT REFERENCES lobbies(code) ON DELETE CASCADE,
@@ -55,14 +55,14 @@ CREATE TABLE votes (
   UNIQUE(lobby_code, round, vote_type, voter_id)
 );
 
--- Hexe-Tränke
+-- Persistent witch resources
 CREATE TABLE witch_status (
   player_id       UUID PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
   heal_used       BOOLEAN DEFAULT false,
   poison_used     BOOLEAN DEFAULT false
 );
 
--- Spiel-Ereignisse
+-- Public game events
 CREATE TABLE game_events (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   lobby_code      TEXT REFERENCES lobbies(code) ON DELETE CASCADE,
@@ -73,13 +73,13 @@ CREATE TABLE game_events (
   created_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- Realtime aktivieren
+-- Publish safe row changes only after server-side projections are in place.
 ALTER TABLE lobbies REPLICA IDENTITY FULL;
 ALTER TABLE players REPLICA IDENTITY FULL;
 ALTER TABLE votes REPLICA IDENTITY FULL;
 ALTER TABLE game_events REPLICA IDENTITY FULL;
 
--- Row Level Security (für Produktion anpassen)
+-- RLS is deny-by-default. Never expose role-bearing rows directly to clients.
 ALTER TABLE lobbies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE players ENABLE ROW LEVEL SECURITY;
 ALTER TABLE night_actions ENABLE ROW LEVEL SECURITY;
@@ -87,8 +87,6 @@ ALTER TABLE votes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE witch_status ENABLE ROW LEVEL SECURITY;
 ALTER TABLE game_events ENABLE ROW LEVEL SECURITY;
 
--- Einfache Policies: alle lesen, nur Service-Role schreibt
-CREATE POLICY "Public read lobbies" ON lobbies FOR SELECT USING (true);
-CREATE POLICY "Public read players" ON players FOR SELECT USING (true);
-CREATE POLICY "Public read votes" ON votes FOR SELECT USING (true);
-CREATE POLICY "Public read events" ON game_events FOR SELECT USING (true);
+-- The browser app uses Realtime Broadcast, not direct table access. Keep these
+-- tables locked until server routes or RPCs expose player-specific projections.
+REVOKE ALL ON lobbies, players, night_actions, votes, witch_status, game_events FROM anon, authenticated;

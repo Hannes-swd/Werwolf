@@ -1,7 +1,23 @@
 'use client'
+
 import { useState } from 'react'
-import { Player, NightAction } from '@/types/game'
+import {
+  ArrowLeft,
+  Check,
+  CircleCheck,
+  Eye,
+  FlaskConical,
+  HeartPulse,
+  Hourglass,
+  MoonStar,
+  ShieldCheck,
+  Sparkles,
+  TriangleAlert,
+} from 'lucide-react'
+import { NightAction, Player, Role } from '@/types/game'
+import { useT } from '@/lib/i18n'
 import PlayerList from './PlayerList'
+import { RoleIcon, WolfMark } from './icons'
 
 interface Props {
   phase: string
@@ -13,293 +29,388 @@ interface Props {
   witchPoisonUsed: boolean
   priestUsed: boolean
   girlPeeked: boolean
+  girlPeekResult: { wolves: string[] } | null
   nightActions: NightAction[]
-  onAction: (action: string, targetId?: string) => Promise<unknown>
+  onAction: (action: string, targetId?: string, secondaryTargetId?: string) => Promise<unknown>
 }
 
 export default function NightPhase({
-  phase, myRole, myId, players, wolfTarget,
-  witchHealUsed, witchPoisonUsed, priestUsed,
-  girlPeeked, nightActions, onAction,
+  phase,
+  myRole,
+  myId,
+  players,
+  wolfTarget,
+  witchHealUsed,
+  witchPoisonUsed,
+  priestUsed,
+  girlPeeked,
+  girlPeekResult,
+  nightActions,
+  onAction,
 }: Props) {
+  const t = useT()
   const [selected, setSelected] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [peekResult, setPeekResult] = useState<{ wolves: string[]; caught: boolean } | null>(null)
-  const [amorFirst, setAmorFirst] = useState<string | null>(null)
+  const [amorPair, setAmorPair] = useState<[string | null, string | null]>([null, null])
   const [witchMode, setWitchMode] = useState<'menu' | 'poison'>('menu')
 
-  const alive = players.filter(p => p.isAlive)
-  const aliveOthers = alive.filter(p => p.id !== myId)
+  const alive = players.filter(player => player.isAlive)
+  const aliveOthers = alive.filter(player => player.id !== myId)
+  const myPhaseActions = nightActions.filter(action => action.actorId === myId && action.phase === phase)
 
-  const myAction = nightActions.find(a => a.actorId === myId)
-  const done = !!myAction
-
-  async function submit(action: string, targetId?: string) {
+  async function submit(action: string, targetId?: string, secondaryTargetId?: string) {
     if (loading) return
     setLoading(true)
-    await onAction(action, targetId ?? selected ?? undefined)
-    setLoading(false)
+    try {
+      await onAction(action, targetId ?? selected ?? undefined, secondaryTargetId)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // ---- WAITING (Dorfbewohner, Jäger, Amor after round 1, etc.) ----
-  if (!['werewolf', 'witch', 'seer', 'priest', 'girl', 'amor'].includes(myRole) ||
-      (phase !== myRole && !(phase === 'wolf' && myRole === 'werewolf') && !(phase === 'witch' && myRole === 'witch'))) {
-    return (
-      <div className="text-center py-8 space-y-3">
-        <div className="text-5xl">😴</div>
-        <p className="text-gray-400">Du schläfst...</p>
-        <p className="text-gray-600 text-sm">Warte auf die anderen Rollen</p>
-      </div>
-    )
-  }
+  const isActiveRole = phase === myRole || (phase === 'wolf' && (myRole === 'werewolf' || myRole === 'girl'))
+  if (!isActiveRole) return <SleepingState />
 
-  // ---- AMOR ----
   if (phase === 'amor' && myRole === 'amor') {
-    if (done) return <WaitingDone />
+    if (myPhaseActions.some(action => action.action === 'link')) return <WaitingDone />
+    const [first, second] = amorPair
     return (
-      <div className="space-y-4">
-        <p className="text-pink-300 text-center text-sm">Wähle zwei Spieler als Liebespaar</p>
+      <PhaseSection
+        role="amor"
+        title={t('components.night.amor.title')}
+        description={t('components.night.amor.description')}
+      >
         <PlayerList
           players={aliveOthers}
           myId={myId}
           selectable
-          selectedId={amorFirst}
+          selectedIds={amorPair.filter((id): id is string => Boolean(id))}
           onSelect={id => {
-            if (!amorFirst) { setAmorFirst(id); return }
-            submit('link', id)
+            if (id === first) {
+              setAmorPair([second, null])
+            } else if (id === second) {
+              setAmorPair([first, null])
+            } else if (!first) {
+              setAmorPair([id, null])
+            } else {
+              setAmorPair([first, id])
+            }
           }}
         />
-      </div>
+        <button
+          type="button"
+          disabled={!first || !second || loading}
+          onClick={() => first && second && submit('link', first, second)}
+          className="ww-button ww-button-primary w-full"
+        >
+          <Sparkles aria-hidden="true" />
+          {t('components.night.amor.confirm')}
+        </button>
+      </PhaseSection>
     )
   }
 
-  // ---- PRIEST ----
   if (phase === 'priest' && myRole === 'priest') {
-    if (priestUsed) return <SkippedPhase reason="Segen bereits verwendet" />
-    if (done) return <WaitingDone />
+    if (priestUsed) return <SkippedPhase reason={t('components.night.priest.used')} />
+    if (myPhaseActions.some(action => action.action === 'bless')) return <WaitingDone />
     return (
-      <div className="space-y-4">
-        <p className="text-indigo-300 text-center text-sm">Wen möchtest du segnen? (Immun gegen Wölfe diese Nacht)</p>
+      <PhaseSection
+        role="priest"
+        title={t('components.night.priest.title')}
+        description={t('components.night.priest.description')}
+      >
         <PlayerList players={alive} myId={myId} selectable selectedId={selected} onSelect={setSelected} />
         <button
+          type="button"
           disabled={!selected || loading}
           onClick={() => submit('bless')}
-          className="w-full py-3 bg-indigo-600 disabled:opacity-40 rounded-xl text-white font-semibold active:scale-95 transition-all"
+          className="ww-button ww-button-primary w-full"
         >
-          Segnen
+          <ShieldCheck aria-hidden="true" />
+          {t('components.night.priest.confirm')}
         </button>
-      </div>
+      </PhaseSection>
     )
   }
 
-  // ---- WOLF ----
   if (phase === 'wolf' && myRole === 'werewolf') {
-    const wolves = players.filter(p => p.role === 'werewolf' && p.isAlive)
-    const wolfVotes = nightActions.filter(a => a.phase === 'wolf' && a.action === 'kill')
-    const votedWolves = new Set(wolfVotes.map(a => a.actorId))
-    const currentTarget = wolfVotes[0]?.targetId ?? null
+    const wolves = players.filter(player => player.role === 'werewolf' && player.isAlive)
+    const wolfVotes = nightActions.filter(action => action.phase === 'wolf' && action.action === 'kill')
+    const ownVote = wolfVotes.find(action => action.actorId === myId)
+    const wolfSelection = selected ?? ownVote?.targetId ?? wolfTarget
 
-    if (done) return <WaitingDone />
     return (
-      <div className="space-y-4">
-        <p className="text-red-300 text-center text-sm">Wähle ein Opfer</p>
+      <PhaseSection
+        role="werewolf"
+        title={t('components.night.wolf.title')}
+        description={t('components.night.wolf.description')}
+      >
         {wolves.length > 1 && (
-          <div className="bg-red-950/50 border border-red-800 rounded-xl p-3">
-            {wolves.filter(w => w.id !== myId).map(w => (
-              <p key={w.id} className="text-red-300 text-sm flex items-center gap-2">
-                <span>{votedWolves.has(w.id) ? '✓' : '⏳'}</span>
-                <span>{w.displayName}</span>
-                {votedWolves.has(w.id) && currentTarget && (
-                  <span className="text-red-400">→ {players.find(p => p.id === currentTarget)?.displayName}</span>
-                )}
-              </p>
-            ))}
+          <div className="ww-surface-strong space-y-2 p-3" aria-label={t('components.night.wolf.voteLabel')}>
+            {wolves.filter(wolf => wolf.id !== myId).map(wolf => {
+              const vote = wolfVotes.find(action => action.actorId === wolf.id)
+              const target = vote ? players.find(player => player.id === vote.targetId) : null
+              return (
+                <div key={wolf.id} className="flex min-w-0 items-center gap-2 text-sm text-[var(--ww-text-muted)]">
+                  {vote
+                    ? <CircleCheck className="shrink-0 text-[var(--ww-success)]" aria-label={t('components.night.wolf.voted')} size={16} />
+                    : <Hourglass className="shrink-0 text-[var(--ww-text-subtle)]" aria-label={t('components.night.wolf.waiting')} size={16} />}
+                  <span className="min-w-0 flex-1 truncate">{wolf.displayName}</span>
+                  {target && (
+                    <span className="max-w-[45%] shrink-0 truncate text-xs text-[var(--ww-danger)]">{t('components.night.wolf.target', { name: target.displayName })}</span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
         <PlayerList
-          players={aliveOthers.filter(p => p.role !== 'werewolf')}
+          players={aliveOthers.filter(player => player.role !== 'werewolf')}
           myId={myId}
           selectable
-          selectedId={selected}
+          selectedId={wolfSelection}
           onSelect={setSelected}
         />
         <button
-          disabled={!selected || loading}
-          onClick={() => submit('kill')}
-          className="w-full py-3 bg-red-700 disabled:opacity-40 rounded-xl text-white font-semibold active:scale-95 transition-all"
+          type="button"
+          disabled={!wolfSelection || loading}
+          onClick={() => wolfSelection && submit('kill', wolfSelection)}
+          className="ww-button ww-button-danger w-full"
         >
-          Bestätigen
+          <WolfMark aria-hidden="true" size={20} />
+          {t('components.night.wolf.confirm')}
         </button>
-      </div>
+      </PhaseSection>
     )
   }
 
-  // ---- GIRL ----
   if (phase === 'wolf' && myRole === 'girl') {
     return (
-      <div className="space-y-4 text-center">
-        <p className="text-gray-400 text-sm">Die Wölfe erwachen... alle schlafen.</p>
-        {!girlPeeked && !peekResult && (
+      <PhaseSection
+        role="girl"
+        title={t('components.night.girl.title')}
+        description={t('components.night.girl.description')}
+      >
+        {!girlPeeked && !girlPeekResult && (
           <>
-            <div className="bg-yellow-950/40 border border-yellow-800 rounded-xl p-3 text-sm text-yellow-300">
-              40% Chance entdeckt zu werden!
+            <div className="ww-callout is-warning">
+              <TriangleAlert aria-hidden="true" size={17} />
+              <span>{t('components.night.girl.warning')}</span>
             </div>
             <button
+              type="button"
               disabled={loading}
-              onClick={async () => {
-                setLoading(true)
-                const res = await onAction('peek') as { wolves: string[]; caught: boolean }
-                setPeekResult(res)
-                setLoading(false)
-              }}
-              className="w-full py-3 bg-teal-700 rounded-xl text-white font-semibold active:scale-95 transition-all"
+              onClick={() => submit('peek')}
+              className="ww-button ww-button-primary w-full"
             >
-              👁 Kurz hinschauen
+              <Eye aria-hidden="true" />
+              {t('components.night.girl.peek')}
             </button>
           </>
         )}
-        {peekResult && (
-          <div className="bg-teal-950/50 border border-teal-700 rounded-xl p-4 space-y-2">
-            <p className="text-teal-300 font-semibold">Die Wölfe sind:</p>
-            {peekResult.wolves.map(name => (
-              <p key={name} className="text-white font-bold">{name}</p>
-            ))}
-            <p className="text-gray-400 text-xs mt-2">Nur du weißt das. Sei vorsichtig!</p>
+        {girlPeekResult && (
+          <div className="ww-surface-strong space-y-3 p-4 text-center" role="status" aria-live="polite">
+            <WolfMark className="mx-auto text-[var(--ww-danger)]" aria-hidden="true" size={30} />
+            <p className="ww-section-label">{t('components.night.girl.resultTitle')}</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {girlPeekResult.wolves.map(name => <span key={name} className="ww-status-chip is-danger">{name}</span>)}
+            </div>
+            <p className="text-xs leading-relaxed text-[var(--ww-text-subtle)]">{t('components.night.girl.keepSecret')}</p>
           </div>
         )}
-        {girlPeeked && !peekResult && (
-          <p className="text-gray-500 text-sm">Du hast bereits gespäht</p>
-        )}
-      </div>
+        {girlPeeked && !girlPeekResult && <WaitingDone label={t('components.night.girl.alreadyPeeked')} />}
+      </PhaseSection>
     )
   }
 
-  // ---- WITCH ----
   if (phase === 'witch' && myRole === 'witch') {
-    const wolfKillId = nightActions.find(a => a.action === 'kill')?.targetId
-    const wolfKillTarget = wolfKillId ? players.find(p => p.id === wolfKillId) : null
+    const wolfKillTarget = wolfTarget ? players.find(player => player.id === wolfTarget) : null
+    const healedThisNight = myPhaseActions.some(action => action.action === 'heal')
+    const poisonedThisNight = myPhaseActions.some(action => action.action === 'poison')
+    const phaseFinished = myPhaseActions.some(action => action.action === 'skip')
+    const canHeal = !witchHealUsed && !healedThisNight && Boolean(wolfKillTarget)
+    const canPoison = !witchPoisonUsed && !poisonedThisNight
 
-    if (done) return <WaitingDone />
-    if (witchHealUsed && witchPoisonUsed) return <SkippedPhase reason="Beide Tränke verbraucht" />
+    if (phaseFinished) return <WaitingDone />
 
-    if (witchMode === 'poison') {
+    if (witchMode === 'poison' && canPoison) {
       return (
-        <div className="space-y-4">
-          <p className="text-purple-300 text-center text-sm">Wen möchtest du vergiften?</p>
+        <PhaseSection role="witch" title={t('components.night.witch.poisonTitle')} description={t('components.night.witch.poisonDescription')}>
           <PlayerList players={alive} myId={myId} selectable selectedId={selected} onSelect={setSelected} />
-          <div className="flex gap-2">
-            <button onClick={() => setWitchMode('menu')} className="flex-1 py-3 bg-gray-700 rounded-xl text-white">Zurück</button>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => { setSelected(null); setWitchMode('menu') }} className="ww-button ww-button-secondary">
+              <ArrowLeft aria-hidden="true" />
+              {t('components.night.witch.back')}
+            </button>
             <button
+              type="button"
               disabled={!selected || loading}
-              onClick={() => submit('poison')}
-              className="flex-1 py-3 bg-purple-700 disabled:opacity-40 rounded-xl text-white font-semibold"
+              onClick={async () => {
+                await submit('poison')
+                setSelected(null)
+                setWitchMode('menu')
+              }}
+              className="ww-button ww-button-danger"
             >
-              Vergiften
+              <FlaskConical aria-hidden="true" />
+              {t('components.night.witch.poison')}
             </button>
           </div>
-        </div>
+        </PhaseSection>
       )
     }
 
     return (
-      <div className="space-y-4">
-        {wolfKillTarget ? (
-          <div className="bg-red-950/50 border border-red-800 rounded-xl p-3 text-center">
-            <p className="text-gray-400 text-xs">Wolf-Opfer</p>
-            <p className="text-white font-semibold">{wolfKillTarget.displayName}</p>
-          </div>
-        ) : (
-          <div className="bg-green-950/40 border border-green-800 rounded-xl p-3 text-center">
-            <p className="text-green-300 text-sm">Niemand wurde angegriffen (Priester-Schutz)</p>
-          </div>
-        )}
+      <PhaseSection
+        role="witch"
+        title={t('components.night.witch.title')}
+        description={t('components.night.witch.description')}
+      >
+        <div className="ww-surface-strong p-3 text-center">
+          <p className="ww-section-label">{t('components.night.witch.packTarget')}</p>
+          <p className="mt-1 break-words font-semibold text-[var(--ww-text)]">{wolfKillTarget?.displayName ?? t('components.night.witch.noAttack')}</p>
+        </div>
 
-        <div className="space-y-2">
-          {!witchHealUsed && wolfKillTarget && (
-            <button
-              disabled={loading}
-              onClick={() => submit('heal', wolfKillTarget.id)}
-              className="w-full py-3 bg-green-700 rounded-xl text-white font-semibold active:scale-95"
-            >
-              💚 Heilen ({wolfKillTarget.displayName})
-            </button>
-          )}
-          {!witchPoisonUsed && (
-            <button
-              disabled={loading}
-              onClick={() => setWitchMode('poison')}
-              className="w-full py-3 bg-purple-700 rounded-xl text-white font-semibold active:scale-95"
-            >
-              ☠️ Vergiften
-            </button>
-          )}
+        <div className="grid gap-2">
           <button
+            type="button"
+            disabled={!canHeal || loading}
+            onClick={() => wolfKillTarget && submit('heal', wolfKillTarget.id)}
+            className="ww-button ww-button-success w-full"
+          >
+            <HeartPulse aria-hidden="true" />
+            {healedThisNight
+              ? t('components.night.witch.healUsed')
+              : witchHealUsed
+                ? t('components.night.witch.healSpent')
+                : wolfKillTarget
+                  ? t('components.night.witch.healTarget', { name: wolfKillTarget.displayName })
+                  : t('components.night.witch.healSpent')}
+          </button>
+          <button
+            type="button"
+            disabled={!canPoison || loading}
+            onClick={() => setWitchMode('poison')}
+            className="ww-button ww-button-danger w-full"
+          >
+            <FlaskConical aria-hidden="true" />
+            {poisonedThisNight
+              ? t('components.night.witch.poisonUsed')
+              : witchPoisonUsed
+                ? t('components.night.witch.poisonSpent')
+                : t('components.night.witch.choosePoison')}
+          </button>
+          <button
+            type="button"
             disabled={loading}
             onClick={() => submit('skip')}
-            className="w-full py-3 bg-gray-700 rounded-xl text-gray-300 active:scale-95"
+            className="ww-button ww-button-secondary w-full"
           >
-            Nichts tun
+            <Check aria-hidden="true" />
+            {t('components.night.witch.finish')}
           </button>
         </div>
-      </div>
+      </PhaseSection>
     )
   }
 
-  // ---- SEER ----
   if (phase === 'seer' && myRole === 'seer') {
-    const seerAction = nightActions.find(a => a.actorId === myId && a.phase === 'seer')
+    const seerAction = myPhaseActions.find(action => action.action === 'reveal')
     if (seerAction) {
-      const target = players.find(p => p.id === seerAction.targetId)
+      const target = players.find(player => player.id === seerAction.targetId)
+      const isWerewolf = target?.role === 'werewolf'
       return (
-        <div className="space-y-3 text-center">
-          <p className="text-blue-300 text-sm">Du hast geschaut:</p>
-          <div className="bg-blue-950/50 border border-blue-700 rounded-xl p-4">
-            <p className="text-white font-semibold">{target?.displayName}</p>
-            <p className="text-blue-300 text-lg font-bold mt-1">
-              {target?.role === 'werewolf' ? '🐺 WERWOLF' : '✅ Kein Werwolf'}
-            </p>
+        <PhaseSection role="seer" title={t('components.night.seer.visionTitle')} description={t('components.night.seer.visionDescription')}>
+          <div className={`ww-reveal-result ${isWerewolf ? 'is-danger' : 'is-success'}`} role="status">
+            {isWerewolf
+              ? <WolfMark aria-hidden="true" size={32} />
+              : <ShieldCheck aria-hidden="true" size={32} />}
+            <p className="font-semibold text-[var(--ww-text)]">{target?.displayName}</p>
+            <p className="ww-section-label">{isWerewolf ? t('components.night.seer.wolf') : t('components.night.seer.safe')}</p>
           </div>
-          <p className="text-gray-500 text-xs">Nur du siehst das. Warte auf die anderen.</p>
-        </div>
+        </PhaseSection>
       )
     }
-    if (done) return <WaitingDone />
+
     return (
-      <div className="space-y-4">
-        <p className="text-blue-300 text-center text-sm">Wessen Rolle möchtest du sehen?</p>
+      <PhaseSection role="seer" title={t('components.night.seer.title')} description={t('components.night.seer.description')}>
         <PlayerList players={aliveOthers} myId={myId} selectable selectedId={selected} onSelect={setSelected} />
         <button
+          type="button"
           disabled={!selected || loading}
           onClick={() => submit('reveal')}
-          className="w-full py-3 bg-blue-700 disabled:opacity-40 rounded-xl text-white font-semibold active:scale-95"
+          className="ww-button ww-button-primary w-full"
         >
-          Schauen
+          <Eye aria-hidden="true" />
+          {t('components.night.seer.reveal')}
         </button>
-      </div>
+      </PhaseSection>
     )
   }
 
+  return <SleepingState />
+}
+
+function PhaseSection({
+  role,
+  title,
+  description,
+  children,
+}: {
+  role: Role
+  title: string
+  description: string
+  children: React.ReactNode
+}) {
+  const t = useT()
   return (
-    <div className="text-center py-8">
-      <p className="text-gray-500">😴 Warte...</p>
+    <section className="space-y-4" aria-labelledby={`night-${role}-title`}>
+      <header className="text-center">
+        <span className="ww-role-icon mx-auto mb-3" data-role={role}>
+          <RoleIcon role={role} size={22} aria-hidden="true" />
+        </span>
+        <p className="ww-section-label">{t(`roles.${role}`)}</p>
+        <h2 id={`night-${role}-title`} className="mt-1 font-display text-2xl text-[var(--ww-text)]">{title}</h2>
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-[var(--ww-text-muted)]">{description}</p>
+      </header>
+      {children}
+    </section>
+  )
+}
+
+function SleepingState() {
+  const t = useT()
+  return (
+    <div className="py-8 text-center" role="status">
+      <span className="ww-orbit-icon mx-auto">
+        <MoonStar aria-hidden="true" size={25} />
+      </span>
+      <p className="mt-4 font-display text-xl text-[var(--ww-text)]">{t('components.night.sleepingTitle')}</p>
+      <p className="mt-1 text-sm text-[var(--ww-text-subtle)]">{t('components.night.sleepingDescription')}</p>
     </div>
   )
 }
 
-function WaitingDone() {
+function WaitingDone({ label }: { label?: string }) {
+  const t = useT()
   return (
-    <div className="text-center py-8 space-y-3">
-      <div className="text-4xl">✓</div>
-      <p className="text-gray-400">Aktion abgeschickt</p>
-      <p className="text-gray-600 text-sm">Warte auf die anderen...</p>
+    <div className="py-8 text-center" role="status">
+      <span className="ww-orbit-icon mx-auto is-success">
+        <CircleCheck aria-hidden="true" size={25} />
+      </span>
+      <p className="mt-4 font-medium text-[var(--ww-text)]">{label ?? t('components.night.actionSent')}</p>
+      <p className="mt-1 text-sm text-[var(--ww-text-subtle)]">{t('components.night.waitingOthers')}</p>
     </div>
   )
 }
 
 function SkippedPhase({ reason }: { reason: string }) {
   return (
-    <div className="text-center py-8 space-y-3">
-      <p className="text-gray-500 text-sm">{reason}</p>
+    <div className="py-8 text-center" role="status">
+      <span className="ww-orbit-icon mx-auto">
+        <MoonStar aria-hidden="true" size={24} />
+      </span>
+      <p className="mt-4 text-sm text-[var(--ww-text-muted)]">{reason}</p>
     </div>
   )
 }

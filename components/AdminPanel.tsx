@@ -1,9 +1,35 @@
 'use client'
+
 import { useState } from 'react'
-import { RoleConfig, ROLE_LABELS, ROLE_ICONS, Role } from '@/types/game'
+import {
+  Crown,
+  Eye,
+  EyeOff,
+  LoaderCircle,
+  Minus,
+  Play,
+  Plus,
+  SlidersHorizontal,
+  Sparkles,
+  UsersRound,
+} from 'lucide-react'
+import { RoleConfig, Role } from '@/types/game'
 import { getAutoConfig, getTotalRoles } from '@/lib/autoConfig'
+import { isValidRoleSetup } from '@/lib/gameEngine'
+import { RoleIcon } from '@/components/icons'
+import { useT } from '@/lib/i18n'
 
 const CONFIGURABLE_ROLES: Role[] = ['werewolf', 'witch', 'seer', 'hunter', 'amor', 'fool', 'girl', 'priest']
+
+const MAX_ROLE_COUNT: Partial<Record<Role, number>> = {
+  witch: 1,
+  seer: 1,
+  hunter: 1,
+  amor: 1,
+  fool: 1,
+  girl: 1,
+  priest: 1,
+}
 
 interface Props {
   config: RoleConfig
@@ -16,149 +42,259 @@ interface Props {
   canStart: boolean
 }
 
+type Settings = {
+  votesVisible: boolean
+  mayorEnabled: boolean
+  autoConfig: boolean
+}
+
 export default function AdminPanel({
   config: initialConfig,
   playerCount,
-  votesVisible: initVotesVisible,
-  mayorEnabled: initMayor,
-  autoConfig: initAuto,
+  votesVisible: initialVotesVisible,
+  mayorEnabled: initialMayorEnabled,
+  autoConfig: initialAutoConfig,
   onUpdate,
   onStart,
   canStart,
 }: Props) {
+  const t = useT()
   const [config, setConfig] = useState<RoleConfig>(initialConfig)
-  const [votesVisible, setVotesVisible] = useState(initVotesVisible)
-  const [mayorEnabled, setMayorEnabled] = useState(initMayor)
-  const [autoConfig, setAutoConfig] = useState(initAuto)
-  const [loading, setLoading] = useState(false)
+  const [votesVisible, setVotesVisible] = useState(initialVotesVisible)
+  const [mayorEnabled, setMayorEnabled] = useState(initialMayorEnabled)
+  const [autoConfig, setAutoConfig] = useState(initialAutoConfig)
+  const [saving, setSaving] = useState(false)
   const [starting, setStarting] = useState(false)
 
   const total = getTotalRoles(config)
   const diff = total - playerCount
-  const ready = diff === 0 && canStart
+  const hasWolf = config.werewolf > 0
+  const hasSafeBalance = config.werewolf < total - config.werewolf
+  const ready = canStart && isValidRoleSetup(config, playerCount)
 
-  function adjust(role: Role, delta: number) {
-    if (autoConfig) return
-    const next = Math.max(0, (config[role] ?? 0) + delta)
-    const updated = { ...config, [role]: next }
-    setConfig(updated)
-    save(updated)
+  function currentSettings(overrides: Partial<Settings> = {}): Settings {
+    return { votesVisible, mayorEnabled, autoConfig, ...overrides }
   }
 
-  async function save(cfg = config) {
-    setLoading(true)
-    await onUpdate(cfg, { votesVisible, mayorEnabled, autoConfig })
-    setLoading(false)
+  async function persist(nextConfig: RoleConfig, nextSettings: Settings) {
+    setSaving(true)
+    try {
+      await onUpdate(nextConfig, nextSettings)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function adjust(role: Role, delta: number) {
+    if (autoConfig || saving) return
+    const max = role === 'werewolf' ? Math.max(1, Math.floor((playerCount - 1) / 2)) : (MAX_ROLE_COUNT[role] ?? playerCount)
+    const nextCount = Math.min(max, Math.max(0, (config[role] ?? 0) + delta))
+    const nextSpecials = CONFIGURABLE_ROLES.reduce(
+      (sum, currentRole) => sum + (currentRole === role ? nextCount : (config[currentRole] ?? 0)),
+      0,
+    )
+    const updated = {
+      ...config,
+      [role]: nextCount,
+      villager: Math.max(0, playerCount - nextSpecials),
+    }
+    setConfig(updated)
+    void persist(updated, currentSettings())
+  }
+
+  function toggleVotes() {
+    const next = !votesVisible
+    setVotesVisible(next)
+    void persist(config, currentSettings({ votesVisible: next }))
+  }
+
+  function toggleMayor() {
+    const next = !mayorEnabled
+    setMayorEnabled(next)
+    void persist(config, currentSettings({ mayorEnabled: next }))
   }
 
   function toggleAuto() {
     const next = !autoConfig
+    const nextConfig = next ? getAutoConfig(playerCount) : config
     setAutoConfig(next)
-    if (next) {
-      const auto = getAutoConfig(playerCount)
-      setConfig(auto)
-      onUpdate(auto, { votesVisible, mayorEnabled, autoConfig: true })
-    }
+    setConfig(nextConfig)
+    void persist(nextConfig, currentSettings({ autoConfig: next }))
   }
 
   async function handleStart() {
+    if (!ready || starting) return
     setStarting(true)
-    await onStart()
-    setStarting(false)
+    try {
+      await onStart()
+    } finally {
+      setStarting(false)
+    }
   }
+
+  const readinessText = !canStart
+    ? t('components.admin.minimumPlayers')
+    : !hasWolf
+      ? t('components.admin.minimumWolf')
+      : !hasSafeBalance
+        ? t('components.admin.wolfBalance')
+      : diff === 0
+        ? t('components.admin.ready')
+        : t(diff > 0 ? 'components.admin.excessRoles' : 'components.admin.missingRoles', { count: Math.abs(diff) })
 
   return (
     <div className="space-y-4">
-      {/* Settings */}
-      <div className="bg-white/5 rounded-2xl p-4 space-y-3">
-        <h3 className="text-gray-300 text-sm font-semibold uppercase tracking-wider">Einstellungen</h3>
-
-        <label className="flex items-center justify-between py-2">
-          <span className="text-white text-sm">Votes sichtbar</span>
-          <button
-            onClick={() => { setVotesVisible(!votesVisible); save() }}
-            className={`w-12 h-6 rounded-full transition-colors ${votesVisible ? 'bg-green-600' : 'bg-gray-600'}`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${votesVisible ? 'translate-x-6' : 'translate-x-0'}`} />
-          </button>
-        </label>
-
-        <label className="flex items-center justify-between py-2 border-t border-white/10">
-          <span className="text-white text-sm">Bürgermeister</span>
-          <button
-            onClick={() => { setMayorEnabled(!mayorEnabled); save() }}
-            className={`w-12 h-6 rounded-full transition-colors ${mayorEnabled ? 'bg-green-600' : 'bg-gray-600'}`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${mayorEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
-          </button>
-        </label>
-
-        <label className="flex items-center justify-between py-2 border-t border-white/10">
-          <span className="text-white text-sm">Auto-Rollen</span>
-          <button
-            onClick={toggleAuto}
-            className={`w-12 h-6 rounded-full transition-colors ${autoConfig ? 'bg-blue-600' : 'bg-gray-600'}`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${autoConfig ? 'translate-x-6' : 'translate-x-0'}`} />
-          </button>
-        </label>
-      </div>
-
-      {/* Role config */}
-      <div className="bg-white/5 rounded-2xl p-4 space-y-2">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-gray-300 text-sm font-semibold uppercase tracking-wider">Rollen</h3>
-          <span className={`text-sm font-semibold ${diff === 0 ? 'text-green-400' : diff > 0 ? 'text-red-400' : 'text-yellow-400'}`}>
-            {total}/{playerCount}
-            {diff !== 0 && ` (${diff > 0 ? '+' : ''}${diff})`}
-          </span>
-        </div>
-
-        {CONFIGURABLE_ROLES.map(role => (
-          <div key={role} className="flex items-center justify-between py-1.5">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">{ROLE_ICONS[role]}</span>
-              <span className="text-white text-sm">{ROLE_LABELS[role]}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                disabled={autoConfig || (config[role] ?? 0) === 0}
-                onClick={() => adjust(role, -1)}
-                className="w-7 h-7 rounded-lg bg-white/10 text-white disabled:opacity-30 flex items-center justify-center text-lg leading-none"
-              >−</button>
-              <span className="text-white w-4 text-center">{config[role] ?? 0}</span>
-              <button
-                disabled={autoConfig}
-                onClick={() => adjust(role, 1)}
-                className="w-7 h-7 rounded-lg bg-white/10 text-white disabled:opacity-30 flex items-center justify-center text-lg leading-none"
-              >+</button>
-            </div>
-          </div>
-        ))}
-
-        <div className="flex items-center justify-between py-1.5 border-t border-white/10 mt-2 pt-3">
+      <section className="ww-panel space-y-1" aria-labelledby="settings-heading">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-lg">🏠</span>
-            <span className="text-gray-400 text-sm">Dorfbewohner</span>
+            <SlidersHorizontal aria-hidden="true" size={17} />
+            <h2 id="settings-heading" className="ww-section-label">{t('components.admin.settings')}</h2>
           </div>
-          <span className="text-gray-400 text-sm">
-            {Math.max(0, playerCount - (total - (config.villager ?? 0)))}
+          {saving && (
+            <span className="ww-status-chip" role="status">
+              <LoaderCircle className="animate-spin" aria-hidden="true" size={13} />
+              {t('components.admin.saving')}
+            </span>
+          )}
+        </div>
+
+        <SettingSwitch
+          label={t('components.admin.votesLabel')}
+          description={t('components.admin.votesDescription')}
+          checked={votesVisible}
+          disabled={saving}
+          icon={votesVisible ? Eye : EyeOff}
+          onToggle={toggleVotes}
+        />
+        <SettingSwitch
+          label={t('components.admin.mayorLabel')}
+          description={t('components.admin.mayorDescription')}
+          checked={mayorEnabled}
+          disabled={saving}
+          icon={Crown}
+          onToggle={toggleMayor}
+        />
+        <SettingSwitch
+          label={t('components.admin.autoLabel')}
+          description={t('components.admin.autoDescription')}
+          checked={autoConfig}
+          disabled={saving}
+          icon={Sparkles}
+          onToggle={toggleAuto}
+        />
+      </section>
+
+      <section className="ww-panel space-y-2" aria-labelledby="roles-heading">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <UsersRound aria-hidden="true" size={17} />
+            <h2 id="roles-heading" className="ww-section-label">{t('components.admin.roles')}</h2>
+          </div>
+          <span className={`ww-status-chip ${diff === 0 ? 'is-success' : diff > 0 ? 'is-danger' : 'is-warning'}`}>
+            {total} / {playerCount}
           </span>
         </div>
+
+        {CONFIGURABLE_ROLES.map(role => {
+          const count = config[role] ?? 0
+          const max = role === 'werewolf' ? Math.max(1, Math.floor((playerCount - 1) / 2)) : (MAX_ROLE_COUNT[role] ?? playerCount)
+          const roleLabel = t(`roles.${role}`)
+          return (
+            <div key={role} className="flex min-h-13 items-center justify-between gap-3 border-b border-white/6 py-2 last:border-0">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="ww-role-icon" data-role={role}>
+                  <RoleIcon role={role} size={19} aria-hidden="true" />
+                </span>
+                <span className="truncate text-sm font-medium text-[var(--ww-text)]">{roleLabel}</span>
+              </div>
+              <div className="flex items-center gap-1.5" aria-label={`${roleLabel}: ${count}`}>
+                <button
+                  type="button"
+                  disabled={autoConfig || saving || count === 0}
+                  onClick={() => adjust(role, -1)}
+                  className="ww-icon-button"
+                  aria-label={t('components.admin.decreaseRole', { role: roleLabel })}
+                >
+                  <Minus aria-hidden="true" size={17} />
+                </button>
+                <output className="w-9 text-center font-semibold tabular-nums text-[var(--ww-text)]" aria-live="polite">
+                  {count}
+                </output>
+                <button
+                  type="button"
+                  disabled={autoConfig || saving || count >= max}
+                  onClick={() => adjust(role, 1)}
+                  className="ww-icon-button"
+                  aria-label={t('components.admin.increaseRole', { role: roleLabel })}
+                >
+                  <Plus aria-hidden="true" size={17} />
+                </button>
+              </div>
+            </div>
+          )
+        })}
+
+        <div className="flex min-h-13 items-center justify-between gap-3 pt-2">
+          <div className="flex items-center gap-3">
+            <span className="ww-role-icon" data-role="villager">
+              <RoleIcon role="villager" size={19} aria-hidden="true" />
+            </span>
+            <span className="text-sm font-medium text-[var(--ww-text-muted)]">{t('roles.villager')}</span>
+          </div>
+          <span className="w-9 text-center font-semibold tabular-nums text-[var(--ww-text-muted)]">{config.villager}</span>
+        </div>
+      </section>
+
+      <div className="ww-surface-strong p-3 text-center" role="status" aria-live="polite">
+        <p className={`text-sm font-medium ${ready ? 'text-[var(--ww-success)]' : 'text-[var(--ww-text-muted)]'}`}>
+          {readinessText}
+        </p>
       </div>
 
       <button
-        disabled={!ready || starting}
+        type="button"
+        disabled={!ready || starting || saving}
         onClick={handleStart}
-        className={`w-full py-4 rounded-2xl text-white font-bold text-lg transition-all active:scale-95
-          ${ready ? 'bg-green-600 shadow-lg shadow-green-900/50' : 'bg-gray-700 opacity-50'}`}
+        className="ww-button ww-button-primary w-full"
       >
-        {starting ? 'Starte...' : ready ? '▶ Spiel starten' : `Noch ${Math.abs(diff)} Rolle${Math.abs(diff) !== 1 ? 'n' : ''} ${diff > 0 ? 'zu viel' : 'fehlen'}`}
+        {starting ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Play aria-hidden="true" fill="currentColor" />}
+        <span>{starting ? t('components.admin.preparing') : t('components.admin.start')}</span>
       </button>
+    </div>
+  )
+}
 
-      {!canStart && (
-        <p className="text-center text-gray-500 text-xs">Mindestens 5 Spieler benötigt</p>
-      )}
+interface SettingSwitchProps {
+  label: string
+  description: string
+  checked: boolean
+  disabled: boolean
+  icon: typeof Eye
+  onToggle: () => void
+}
+
+function SettingSwitch({ label, description, checked, disabled, icon: Icon, onToggle }: SettingSwitchProps) {
+  return (
+    <div className="flex min-h-16 items-center justify-between gap-4 border-t border-white/6 py-3 first:border-0">
+      <div className="flex min-w-0 items-start gap-3">
+        <Icon className="mt-0.5 shrink-0 text-[var(--ww-text-muted)]" aria-hidden="true" size={18} />
+        <div>
+          <p className="text-sm font-medium text-[var(--ww-text)]">{label}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-[var(--ww-text-subtle)]">{description}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={onToggle}
+        className="ww-switch shrink-0"
+        data-state={checked ? 'on' : 'off'}
+      >
+        <span aria-hidden="true" />
+      </button>
     </div>
   )
 }
