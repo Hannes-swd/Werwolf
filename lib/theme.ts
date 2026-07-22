@@ -7,8 +7,8 @@ export const THEME_STORAGE_KEY = 'werwolf_theme'
 
 // Matches the page background so the browser chrome does not flash a stale colour.
 export const THEME_COLOR: Record<Theme, string> = {
-  dark: '#0e1116',
-  light: '#f6f7f9',
+  dark: '#14100d',
+  light: '#f5f0e8',
 }
 
 export function isTheme(value: unknown): value is Theme {

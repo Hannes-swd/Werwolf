@@ -227,7 +227,7 @@ test.describe('home and language', () => {
     await expect(toggle).toHaveAttribute('aria-checked', 'false')
     await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light')
     await expect.poll(() => page.evaluate(() => localStorage.getItem('werwolf_theme'))).toBe('light')
-    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#f6f7f9')
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#f5f0e8')
 
     // The bootstrap script has to restore light before paint, without a hydration warning.
     await page.reload()

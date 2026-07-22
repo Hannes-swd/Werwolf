@@ -94,6 +94,8 @@ export default function HomePageClient() {
       const context = gsap.context(() => {
         const atmosphere = root.querySelector('[data-home-atmosphere]')
         const reveals = gsap.utils.toArray<HTMLElement>('[data-home-reveal]', root)
+        const title = root.querySelector('.ww-home-title')
+        const moon = root.querySelector('.ww-home-moon')
 
         const timeline = gsap.timeline({ defaults: { ease: 'power3.out' } })
         if (atmosphere) {
@@ -110,6 +112,39 @@ export default function HomePageClient() {
           { autoAlpha: 1, y: 0, duration: 0.62, stagger: 0.09, clearProps: 'transform' },
           0.12,
         )
+        if (title) {
+          // Wipe the wordmark up from its own baseline. Clipping the whole line
+          // keeps Arabic letter-joining and CJK intact, unlike a per-glyph split.
+          timeline.fromTo(
+            title,
+            { clipPath: 'inset(105% 0% -10% 0%)', y: 14 },
+            {
+              clipPath: 'inset(-10% 0% -10% 0%)',
+              y: 0,
+              duration: 0.9,
+              ease: 'power4.out',
+              clearProps: 'clipPath,transform',
+            },
+            0.22,
+          )
+        }
+        if (moon) {
+          timeline.fromTo(
+            moon,
+            { autoAlpha: 0, y: -18, scale: 0.92 },
+            { autoAlpha: 1, y: 0, scale: 1, duration: 1.4, ease: 'power2.out' },
+            0.1,
+          )
+          // Long, barely-there drift so the sky never looks frozen.
+          gsap.to(moon, {
+            y: '+=10',
+            duration: 9,
+            ease: 'sine.inOut',
+            repeat: -1,
+            yoyo: true,
+            delay: 1.4,
+          })
+        }
       }, root)
 
       return () => context.revert()

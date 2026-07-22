@@ -36,8 +36,8 @@ describe('theme', () => {
   })
 
   it('keeps the browser chrome colour in step with each theme', () => {
-    expect(THEME_COLOR.dark).toBe('#0e1116')
-    expect(THEME_COLOR.light).toBe('#f6f7f9')
+    expect(THEME_COLOR.dark).toBe('#14100d')
+    expect(THEME_COLOR.light).toBe('#f5f0e8')
 
     const css = readFileSync(projectFile('app/globals.css'), 'utf8')
     expect(css).toContain(`--ww-bg: light-dark(${THEME_COLOR.light}, ${THEME_COLOR.dark})`)
