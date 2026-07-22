@@ -2,35 +2,62 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import PWARegister from '@/components/PWARegister'
 import ChunkErrorHandler from '@/components/ChunkErrorHandler'
+import MotionAtmosphere from '@/components/MotionAtmosphere'
+import { LanguageProvider } from '@/lib/i18n'
+import {
+  DEFAULT_LOCALE,
+  HTML_LANG,
+  LOCALE_DIRECTION,
+  translate,
+} from '@/lib/i18n/translations'
+import { resolveSiteUrl } from '@/lib/site-url'
 
 export const metadata: Metadata = {
-  title: 'Werwolf',
-  description: 'Das klassische Werwolf-Spiel im Browser',
+  metadataBase: resolveSiteUrl(),
+  title: {
+    default: translate(DEFAULT_LOCALE, 'metadata.title'),
+    template: `%s · ${translate(DEFAULT_LOCALE, 'metadata.title')}`,
+  },
+  applicationName: translate(DEFAULT_LOCALE, 'common.appName'),
+  description: translate(DEFAULT_LOCALE, 'metadata.description'),
+  category: 'game',
+  keywords: ['Werewolf', 'social game', 'party game', 'browser game'],
+  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'Werwolf',
+    statusBarStyle: 'default',
+    title: translate(DEFAULT_LOCALE, 'common.appName'),
+  },
+  formatDetection: {
+    telephone: false,
   },
   icons: {
-    icon: '/icon.svg',
-    apple: '/icon.svg',
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+    shortcut: '/icon.svg',
   },
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: '#08080f',
+  viewportFit: 'cover',
+  colorScheme: 'light',
+  themeColor: '#f6f7f9',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="de" className="h-full">
-      <body className="min-h-dvh flex flex-col antialiased">
+    <html
+      lang={HTML_LANG[DEFAULT_LOCALE]}
+      dir={LOCALE_DIRECTION[DEFAULT_LOCALE]}
+      className="h-full"
+      data-scroll-behavior="smooth"
+    >
+      <body className="min-h-dvh flex flex-col">
         <ChunkErrorHandler />
         <PWARegister />
-        {children}
+        <MotionAtmosphere />
+        <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>
   )

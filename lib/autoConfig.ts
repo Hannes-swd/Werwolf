@@ -27,7 +27,7 @@ export function getAutoConfig(playerCount: number): RoleConfig {
   }
 
   const hunter = playerCount >= 7 ? 1 : 0
-  const special = werewolves + 1 + 1 + hunter + priest + fool + girl // +witch +seer
+  const special = werewolves + 1 + 1 + hunter + priest + fool + girl // Witch and seer are always included.
   const villagers = Math.max(0, playerCount - special)
 
   return {

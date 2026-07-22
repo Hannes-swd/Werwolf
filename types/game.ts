@@ -91,6 +91,7 @@ export interface NightAction {
   phase: string
   actorId: string
   targetId: string | null
+  secondTargetId?: string | null
   action: 'kill' | 'heal' | 'poison' | 'reveal' | 'bless' | 'peek' | 'link' | 'skip'
   createdAt: string
 }
@@ -127,40 +128,4 @@ export interface NightResult {
   poisoned: string[]
   wolfTarget: string | null
   priestProtected: boolean
-}
-
-export const ROLE_LABELS: Record<Role, string> = {
-  villager: 'Dorfbewohner',
-  werewolf: 'Werwolf',
-  witch: 'Hexe',
-  seer: 'Seher',
-  hunter: 'Jäger',
-  amor: 'Amor',
-  fool: 'Dorfdepp',
-  girl: 'Mädchen',
-  priest: 'Priester',
-}
-
-export const ROLE_ICONS: Record<Role, string> = {
-  villager: '🏠',
-  werewolf: '🐺',
-  witch: '🧙',
-  seer: '👁',
-  hunter: '🔫',
-  amor: '💘',
-  fool: '🃏',
-  girl: '👧',
-  priest: '✝',
-}
-
-export const ROLE_TEAM: Record<Role, 'village' | 'wolves' | 'lovers'> = {
-  villager: 'village',
-  werewolf: 'wolves',
-  witch: 'village',
-  seer: 'village',
-  hunter: 'village',
-  amor: 'village',
-  fool: 'village',
-  girl: 'village',
-  priest: 'village',
 }
