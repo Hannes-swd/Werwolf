@@ -74,6 +74,13 @@ const enBase = {
     groupLabel: 'Choose language',
     changeTo: 'Choose {{language}}',
   },
+  theme: {
+    label: 'Appearance',
+    switchToLight: 'Switch to light appearance',
+    switchToDark: 'Switch to dark appearance',
+    dark: 'Dark',
+    light: 'Light',
+  },
   home: {
     guestName: 'Player',
     kicker: 'One night. One village. Plenty of lies.',
@@ -145,6 +152,13 @@ const deBase = {
     groupLabel: 'Sprache wählen',
     changeTo: '{{language}} wählen',
   },
+  theme: {
+    label: 'Darstellung',
+    switchToLight: 'Zur hellen Darstellung wechseln',
+    switchToDark: 'Zur dunklen Darstellung wechseln',
+    dark: 'Dunkel',
+    light: 'Hell',
+  },
   home: {
     guestName: 'Spieler',
     kicker: 'Eine Nacht. Ein Dorf. Viele Lügen.',
@@ -211,6 +225,13 @@ const esBase = {
     label: 'Idioma',
     groupLabel: 'Elegir idioma',
     changeTo: 'Elegir {{language}}',
+  },
+  theme: {
+    label: 'Apariencia',
+    switchToLight: 'Cambiar a apariencia clara',
+    switchToDark: 'Cambiar a apariencia oscura',
+    dark: 'Oscuro',
+    light: 'Claro',
   },
   home: {
     guestName: 'Jugador',
@@ -279,6 +300,13 @@ const frBase = {
     groupLabel: 'Choisir la langue',
     changeTo: 'Choisir {{language}}',
   },
+  theme: {
+    label: 'Apparence',
+    switchToLight: 'Passer à l\'apparence claire',
+    switchToDark: 'Passer à l\'apparence sombre',
+    dark: 'Sombre',
+    light: 'Clair',
+  },
   home: {
     guestName: 'Joueur',
     kicker: 'Une nuit. Un village. Beaucoup de mensonges.',
@@ -345,6 +373,13 @@ const itBase = {
     label: 'Lingua',
     groupLabel: 'Scegli la lingua',
     changeTo: 'Scegli {{language}}',
+  },
+  theme: {
+    label: 'Aspetto',
+    switchToLight: 'Passa all\'aspetto chiaro',
+    switchToDark: 'Passa all\'aspetto scuro',
+    dark: 'Scuro',
+    light: 'Chiaro',
   },
   home: {
     guestName: 'Giocatore',
@@ -413,6 +448,13 @@ const ptBase = {
     groupLabel: 'Escolher idioma',
     changeTo: 'Escolher {{language}}',
   },
+  theme: {
+    label: 'Aparência',
+    switchToLight: 'Mudar para aparência clara',
+    switchToDark: 'Mudar para aparência escura',
+    dark: 'Escuro',
+    light: 'Claro',
+  },
   home: {
     guestName: 'Jogador',
     kicker: 'Uma noite. Uma vila. Muitas mentiras.',
@@ -479,6 +521,13 @@ const zhBase = {
     label: '语言',
     groupLabel: '选择语言',
     changeTo: '选择{{language}}',
+  },
+  theme: {
+    label: '外观',
+    switchToLight: '切换到浅色外观',
+    switchToDark: '切换到深色外观',
+    dark: '深色',
+    light: '浅色',
   },
   home: {
     guestName: '玩家',
@@ -547,6 +596,13 @@ const jaBase = {
     groupLabel: '言語を選ぶ',
     changeTo: '{{language}}を選ぶ',
   },
+  theme: {
+    label: '外観',
+    switchToLight: 'ライト表示に切り替える',
+    switchToDark: 'ダーク表示に切り替える',
+    dark: 'ダーク',
+    light: 'ライト',
+  },
   home: {
     guestName: 'プレイヤー',
     kicker: '一夜。一つの村。たくさんの嘘。',
@@ -614,6 +670,13 @@ const koBase = {
     groupLabel: '언어 선택',
     changeTo: '{{language}} 선택',
   },
+  theme: {
+    label: '화면 모드',
+    switchToLight: '밝은 모드로 전환',
+    switchToDark: '어두운 모드로 전환',
+    dark: '어두운 모드',
+    light: '밝은 모드',
+  },
   home: {
     guestName: '플레이어',
     kicker: '하룻밤. 한 마을. 수많은 거짓말.',
@@ -680,6 +743,13 @@ const arBase = {
     label: 'اللغة',
     groupLabel: 'اختر اللغة',
     changeTo: 'اختر {{language}}',
+  },
+  theme: {
+    label: 'المظهر',
+    switchToLight: 'التبديل إلى المظهر الفاتح',
+    switchToDark: 'التبديل إلى المظهر الداكن',
+    dark: 'داكن',
+    light: 'فاتح',
   },
   home: {
     guestName: 'لاعب',

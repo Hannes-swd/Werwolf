@@ -28,6 +28,7 @@ import { broadcastGame, broadcastLobby, subscribeToLobby, BroadcastMsg } from '@
 import { isValidRoleSetup, startGame } from '@/lib/gameEngine'
 import AdminPanel from '@/components/AdminPanel'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
+import ThemeToggle from '@/components/ThemeToggle'
 import { RoleConfig } from '@/types/game'
 import { getAutoConfig } from '@/lib/autoConfig'
 import { useT, type TranslationKey } from '@/lib/i18n'
@@ -353,7 +354,10 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
   if (!lobby || !me) {
     return (
       <main className="app-shell ww-safe-screen relative flex min-h-dvh items-center justify-center px-4">
-        <LanguageSwitcher className="absolute end-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))]" />
+        <div className="absolute end-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] flex items-center gap-2">
+          <ThemeToggle />
+          <LanguageSwitcher />
+        </div>
         <div className="flex items-center gap-3 text-sm text-[var(--ww-text-muted)]" role="status">
           <LoaderCircle className="animate-spin" aria-hidden="true" size={18} />
           {t('lobby.loading')}
@@ -365,7 +369,8 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
   return (
     <main ref={rootRef} className="app-shell ww-page-frame min-h-dvh px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-6">
       <div className="mx-auto w-full max-w-5xl">
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex items-center justify-end gap-2">
+          <ThemeToggle />
           <LanguageSwitcher />
         </div>
 

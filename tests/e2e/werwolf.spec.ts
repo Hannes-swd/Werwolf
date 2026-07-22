@@ -206,6 +206,35 @@ test.describe('home and language', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'ar')
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
   })
+
+  test('opens in dark, switches to light, and remembers the choice', async ({ page }) => {
+    const consoleErrors: string[] = []
+    page.on('console', message => {
+      if (message.type() === 'error') consoleErrors.push(message.text())
+    })
+
+    await page.goto('/')
+
+    const html = page.locator('html')
+    await expect(html).toHaveAttribute('data-theme', 'dark')
+    await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('dark')
+
+    const toggle = page.getByRole('switch').first()
+    await expect(toggle).toHaveAttribute('aria-checked', 'true')
+    await toggle.click()
+
+    await expect(html).toHaveAttribute('data-theme', 'light')
+    await expect(toggle).toHaveAttribute('aria-checked', 'false')
+    await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light')
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('werwolf_theme'))).toBe('light')
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#f6f7f9')
+
+    // The bootstrap script has to restore light before paint, without a hydration warning.
+    await page.reload()
+    await expect(html).toHaveAttribute('data-theme', 'light')
+    await expect(page.getByRole('switch').first()).toHaveAttribute('aria-checked', 'false')
+    expect(consoleErrors.filter(text => text.includes('hydrat'))).toEqual([])
+  })
 })
 
 test.describe('mobile accessibility', () => {

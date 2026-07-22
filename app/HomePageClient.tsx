@@ -15,6 +15,7 @@ import { gsap } from 'gsap'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { WolfMark } from '@/components/icons'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
+import ThemeToggle from '@/components/ThemeToggle'
 import { useT, type TranslationKey } from '@/lib/i18n'
 import { generateGuestName, generateLobbyCode } from '@/lib/roleAssignment'
 import { saveName, loadName, saveLobby, saveMyPlayer } from '@/lib/storage'
@@ -212,9 +213,10 @@ export default function HomePageClient() {
       </div>
 
       <div
-        className="ww-home-language absolute end-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-20"
+        className="ww-home-language absolute end-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-20 flex items-center gap-2"
         data-home-reveal
       >
+        <ThemeToggle />
         <LanguageSwitcher />
       </div>
 

@@ -4,6 +4,8 @@ import PWARegister from '@/components/PWARegister'
 import ChunkErrorHandler from '@/components/ChunkErrorHandler'
 import MotionAtmosphere from '@/components/MotionAtmosphere'
 import { LanguageProvider } from '@/lib/i18n'
+import { ThemeProvider } from '@/lib/ThemeProvider'
+import { DEFAULT_THEME, THEME_BOOTSTRAP_SCRIPT, THEME_COLOR } from '@/lib/theme'
 import {
   DEFAULT_LOCALE,
   HTML_LANG,
@@ -45,8 +47,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  colorScheme: 'light',
-  themeColor: '#f6f7f9',
+  colorScheme: 'dark light',
+  themeColor: THEME_COLOR[DEFAULT_THEME],
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -55,13 +57,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang={HTML_LANG[DEFAULT_LOCALE]}
       dir={LOCALE_DIRECTION[DEFAULT_LOCALE]}
       className="h-full"
+      data-theme={DEFAULT_THEME}
       data-scroll-behavior="smooth"
+      /* The bootstrap script rewrites data-theme before hydration. */
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+      </head>
       <body className="min-h-dvh flex flex-col">
         <ChunkErrorHandler />
         <PWARegister />
         <MotionAtmosphere />
-        <LanguageProvider>{children}</LanguageProvider>
+        <ThemeProvider>
+          <LanguageProvider>{children}</LanguageProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

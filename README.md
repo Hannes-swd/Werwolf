@@ -5,6 +5,7 @@ A polished, mobile-first Werewolf party game built with Next.js, React, Supabase
 ## Highlights
 
 - Original Apple-inspired interface with restrained glass surfaces, responsive spacing, and custom Lucide-based iconography
+- Dark and light appearance driven by a single `color-scheme` switch, dark by default, restored before first paint
 - GSAP page, phase, roster, role-reveal, scoreboard, and ambient motion with a complete reduced-motion fallback
 - Ten locales with English as the first-visit default: English, German, Spanish, French, Italian, Portuguese, Simplified Chinese, Japanese, Korean, and Arabic
 - Right-to-left document layout for Arabic, persisted language choice, and translated accessibility labels
