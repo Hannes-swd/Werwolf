@@ -151,13 +151,13 @@ export default function NightPhase({
               const vote = wolfVotes.find(action => action.actorId === wolf.id)
               const target = vote ? players.find(player => player.id === vote.targetId) : null
               return (
-                <div key={wolf.id} className="flex items-center gap-2 text-sm text-[var(--ww-text-muted)]">
+                <div key={wolf.id} className="flex min-w-0 items-center gap-2 text-sm text-[var(--ww-text-muted)]">
                   {vote
-                    ? <CircleCheck className="text-[var(--ww-success)]" aria-label={t('components.night.wolf.voted')} size={16} />
-                    : <Hourglass className="text-[var(--ww-text-subtle)]" aria-label={t('components.night.wolf.waiting')} size={16} />}
-                  <span>{wolf.displayName}</span>
+                    ? <CircleCheck className="shrink-0 text-[var(--ww-success)]" aria-label={t('components.night.wolf.voted')} size={16} />
+                    : <Hourglass className="shrink-0 text-[var(--ww-text-subtle)]" aria-label={t('components.night.wolf.waiting')} size={16} />}
+                  <span className="min-w-0 flex-1 truncate">{wolf.displayName}</span>
                   {target && (
-                    <span className="ml-auto text-xs text-[var(--ww-danger)]">{t('components.night.wolf.target', { name: target.displayName })}</span>
+                    <span className="max-w-[45%] shrink-0 truncate text-xs text-[var(--ww-danger)]">{t('components.night.wolf.target', { name: target.displayName })}</span>
                   )}
                 </div>
               )
@@ -268,7 +268,7 @@ export default function NightPhase({
       >
         <div className="ww-surface-strong p-3 text-center">
           <p className="ww-section-label">{t('components.night.witch.packTarget')}</p>
-          <p className="mt-1 font-semibold text-[var(--ww-text)]">{wolfKillTarget?.displayName ?? t('components.night.witch.noAttack')}</p>
+          <p className="mt-1 break-words font-semibold text-[var(--ww-text)]">{wolfKillTarget?.displayName ?? t('components.night.witch.noAttack')}</p>
         </div>
 
         <div className="grid gap-2">

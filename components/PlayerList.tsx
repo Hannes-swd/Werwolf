@@ -51,16 +51,16 @@ export default function PlayerList({
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
+              <div className="flex min-w-0 items-center gap-1.5">
                 <span className={`font-medium truncate ${isDead ? 'text-gray-500' : 'text-white'}`}>
                   {p.displayName}
                 </span>
-                {isMe && <span className="text-xs text-gray-400">({t('components.playerList.you')})</span>}
+                {isMe && <span className="shrink-0 text-xs text-gray-400">({t('components.playerList.you')})</span>}
                 {p.isMayor && (
-                  <UiIcon name="crown" size={15} strokeWidth={1.9} label={t('components.playerList.mayor')} className="text-yellow-400" />
+                  <UiIcon name="crown" size={15} strokeWidth={1.9} label={t('components.playerList.mayor')} className="shrink-0 text-yellow-400" />
                 )}
                 {!p.canVote && p.isAlive && (
-                  <span className="ww-status-chip text-xs text-orange-400">{t('components.playerList.noVote')}</span>
+                  <span className="ww-status-chip max-w-28 shrink-0 truncate text-xs text-orange-400">{t('components.playerList.noVote')}</span>
                 )}
               </div>
               {showRoles && p.role && (

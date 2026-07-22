@@ -15,7 +15,8 @@
   --ww-muted: #667085;
   --ww-muted-strong: #4f5969;
   --ww-text-muted: var(--ww-muted);
-  --ww-text-subtle: #8a94a4;
+  /* Dark enough to clear 4.5:1 on the light surfaces it sits on. */
+  --ww-text-subtle: #6b7484;
   --ww-ember: #4273df;
   --ww-ember-strong: #315fca;
   --ww-moon: #6d8bd7;
@@ -35,14 +36,15 @@
 }
 
 html {
-  min-width: 320px;
   min-height: 100%;
   background: var(--ww-bg);
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
-  min-width: 320px;
+  width: 100%;
   min-height: 100dvh;
   margin: 0;
   overflow-x: hidden;
@@ -54,6 +56,7 @@ body {
   font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  -webkit-overflow-scrolling: touch;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -238,6 +241,15 @@ input:disabled {
   box-shadow: var(--ww-shadow-soft);
 }
 
+.ww-surface,
+.ww-surface-strong,
+.ww-panel,
+.ww-vote-panel,
+.ww-scoreboard,
+.ww-game-log {
+  min-width: 0;
+}
+
 .ww-surface {
   border-radius: var(--ww-radius-md);
   box-shadow: 0 1px 3px rgb(35 48 74 / 0.04);
@@ -323,7 +335,6 @@ input:disabled {
 .ww-button-primary:not(:disabled):hover {
   background: linear-gradient(180deg, #4777de, #2957c2);
   box-shadow: 0 12px 28px rgb(49 95 202 / 0.25), inset 0 1px rgb(255 255 255 / 0.2);
-  transform: translateY(-1px);
 }
 
 .ww-button-secondary {
@@ -337,7 +348,6 @@ input:disabled {
   border-color: #bcc6d5;
   background: #ffffff;
   color: var(--ww-text);
-  transform: translateY(-1px);
 }
 
 .ww-button-success {
@@ -411,6 +421,7 @@ input:disabled {
   background: rgb(255 255 255 / 0.94);
   padding: 0.8rem 0.95rem;
   color: var(--ww-text);
+  font-size: 1rem;
   caret-color: var(--ww-ember);
   box-shadow: inset 0 1px 2px rgb(35 48 74 / 0.025), 0 1px 3px rgb(35 48 74 / 0.035);
   transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
@@ -439,6 +450,10 @@ input:disabled {
   letter-spacing: 0.16em;
   text-align: center;
   text-transform: uppercase;
+}
+
+.ww-language-switcher select {
+  font-size: 1rem;
 }
 
 .ww-icon-button {
@@ -485,37 +500,53 @@ input:disabled {
 
 .ww-switch {
   position: relative;
-  width: 3rem;
-  min-width: 3rem;
-  height: 1.72rem;
+  width: 3.25rem;
+  min-width: 3.25rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  transition: opacity 180ms ease;
+}
+
+.ww-switch::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3.25rem;
+  height: 1.9rem;
   border: 1px solid #c9d0da;
   border-radius: 999px;
   background: #dfe3e9;
   box-shadow: inset 0 1px 3px rgb(35 48 74 / 0.1);
-  transition: border-color 180ms ease, background-color 180ms ease, opacity 180ms ease;
+  content: "";
+  transform: translateY(-50%);
+  transition: border-color 180ms ease, background-color 180ms ease;
 }
 
 .ww-switch > span {
   position: absolute;
-  top: 0.18rem;
-  left: 0.18rem;
-  width: 1.22rem;
-  height: 1.22rem;
+  z-index: 1;
+  top: 50%;
+  left: 0.2rem;
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: 50%;
   background: #ffffff;
   box-shadow: 0 2px 6px rgb(35 48 74 / 0.22);
+  transform: translateY(-50%);
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.ww-switch[data-state="on"],
-.ww-switch[aria-checked="true"] {
+.ww-switch[data-state="on"]::before,
+.ww-switch[aria-checked="true"]::before {
   border-color: #3769d4;
   background: #4273df;
 }
 
 .ww-switch[data-state="on"] > span,
 .ww-switch[aria-checked="true"] > span {
-  transform: translateX(1.28rem);
+  transform: translate(1.35rem, -50%);
 }
 
 .ww-switch:disabled {
@@ -525,6 +556,7 @@ input:disabled {
 .ww-player-row {
   display: flex;
   width: 100%;
+  min-width: 0;
   min-height: 3.5rem;
   align-items: center;
   gap: 0.75rem;
@@ -541,7 +573,6 @@ button.ww-player-row:not(:disabled):hover {
   border-color: #c5cdd9;
   background: #ffffff;
   box-shadow: 0 5px 16px rgb(35 48 74 / 0.07);
-  transform: translateY(-1px);
 }
 
 .ww-player-row[aria-pressed="true"],
@@ -780,6 +811,7 @@ button.ww-player-row:not(:disabled):hover {
   color: var(--ww-text-soft);
   font-size: 0.82rem;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .ww-callout > svg {
@@ -971,7 +1003,6 @@ button.ww-player-row:not(:disabled):hover {
 
 .ww-rune-tile:not(:disabled):hover {
   box-shadow: 0 9px 22px rgb(35 48 74 / 0.13);
-  transform: translateY(-2px);
 }
 
 .ww-rune-tile:not(:disabled):active {
@@ -1053,6 +1084,7 @@ button.ww-player-row:not(:disabled):hover {
   color: #9f3442;
   font-size: 0.84rem;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .ww-alert svg {
@@ -1087,12 +1119,38 @@ button.ww-player-row:not(:disabled):hover {
   backdrop-filter: blur(20px) saturate(1.18);
 }
 
+.ww-page-frame {
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-left: max(1rem, env(safe-area-inset-left));
+}
+
+.ww-safe-screen {
+  padding-top: max(2rem, env(safe-area-inset-top));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  padding-left: max(1rem, env(safe-area-inset-left));
+}
+
+.ww-game-header-status,
+.ww-game-header-player {
+  max-width: 50%;
+}
+
+.ww-game-header .ww-section-label,
+.ww-game-header-player > p {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ww-game-header > div:first-child svg {
   color: var(--ww-ember);
 }
 
+/* Enough floor to stop sparse phases collapsing, without padding out a full vote list. */
 .ww-phase-panel {
-  min-height: 25rem;
+  min-height: 19rem;
   background: rgb(255 255 255 / 0.92);
 }
 
@@ -1100,9 +1158,11 @@ button.ww-player-row:not(:disabled):hover {
   position: fixed;
   z-index: 60;
   top: max(1rem, env(safe-area-inset-top));
-  left: 50%;
+  right: max(1rem, env(safe-area-inset-right));
+  left: max(1rem, env(safe-area-inset-left));
   display: flex;
-  width: min(calc(100% - 2rem), 28rem);
+  width: auto;
+  max-width: 28rem;
   min-height: 3.25rem;
   align-items: center;
   gap: 0.7rem;
@@ -1114,7 +1174,7 @@ button.ww-player-row:not(:disabled):hover {
   color: #355cae;
   font-size: 0.86rem;
   font-weight: 620;
-  transform: translateX(-50%);
+  margin-inline: auto;
   backdrop-filter: blur(20px) saturate(1.12);
 }
 
@@ -1164,7 +1224,7 @@ button.ww-player-row:not(:disabled):hover {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-height: 100svh;
-  overflow: hidden;
+  overflow-x: clip;
 }
 
 .ww-home-atmosphere {
@@ -1307,6 +1367,10 @@ button.ww-player-row:not(:disabled):hover {
   text-indent: -0.04em;
 }
 
+.ww-home-title[data-long-title] {
+  font-size: clamp(2.35rem, 10vw, 5.3rem);
+}
+
 .ww-home-subtitle {
   width: 100%;
   max-width: 28rem;
@@ -1355,6 +1419,37 @@ button.ww-player-row:not(:disabled):hover {
   color: var(--ww-success);
 }
 
+.ww-lobby-code-button {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ww-lobby-code {
+  min-width: 0;
+  font-size: clamp(1.75rem, 10.5vw, 3rem);
+  letter-spacing: clamp(0.08em, 1.6vw, 0.2em);
+  white-space: nowrap;
+}
+
+[data-lobby-section] {
+  min-width: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ww-button-primary:not(:disabled):hover,
+  .ww-button-secondary:not(:disabled):hover,
+  button.ww-player-row:not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+
+  .ww-rune-tile:not(:disabled):hover {
+    transform: translateY(-2px);
+  }
+}
+
 .ww-noscript {
   width: min(42rem, calc(100% - 2rem));
   margin: 2rem auto;
@@ -1379,6 +1474,10 @@ button.ww-player-row:not(:disabled):hover {
 }
 
 @media (max-width: 380px) {
+  .ww-language-switcher select {
+    width: 9rem;
+  }
+
   .ww-home-layout {
     gap: 1.1rem;
   }
@@ -1407,8 +1506,40 @@ button.ww-player-row:not(:disabled):hover {
   }
 
   .ww-game-header {
+    gap: 0.55rem;
     border-radius: 1rem;
     padding: 0.75rem 0.82rem;
+  }
+
+  .ww-game-header-status,
+  .ww-game-header-player {
+    max-width: calc(50% - 0.275rem);
+  }
+
+  .ww-lobby-hero {
+    padding-inline: 1rem;
+  }
+
+  .ww-lobby-code-button {
+    gap: 0.5rem;
+    min-height: 3.5rem;
+    padding-inline: 0.25rem;
+  }
+
+  .ww-lobby-code {
+    font-size: clamp(1.65rem, 9.5vw, 2.25rem);
+    letter-spacing: 0.09em;
+  }
+}
+
+@media (max-width: 480px) {
+  .ww-home-layout {
+    padding-top: max(5.25rem, calc(env(safe-area-inset-top) + 4.25rem));
+  }
+
+  .ww-motion-mesh-tertiary,
+  .ww-motion-mesh-focus {
+    display: none;
   }
 }
 
@@ -1429,9 +1560,16 @@ button.ww-player-row:not(:disabled):hover {
   }
 }
 
+@media (max-height: 720px) {
+  .ww-safe-screen:is(.flex) {
+    align-items: flex-start;
+  }
+}
+
 @media (max-width: 640px) {
   .ww-motion-mesh {
-    filter: blur(58px);
+    opacity: 0.28;
+    filter: blur(42px);
   }
 
   .ww-motion-mesh-primary {
@@ -1450,6 +1588,64 @@ button.ww-player-row:not(:disabled):hover {
     bottom: -18rem;
     left: -12rem;
     width: 40rem;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 859px) and (max-height: 600px) {
+  .ww-home-layout {
+    grid-template-areas:
+      "brand panel"
+      "note panel";
+    grid-template-columns: minmax(0, 0.85fr) minmax(19rem, 1.15fr);
+    max-width: 54rem;
+    align-self: start;
+    column-gap: clamp(1.5rem, 5vw, 3rem);
+    row-gap: 1rem;
+    padding-top: max(4.5rem, calc(env(safe-area-inset-top) + 3.75rem));
+  }
+
+  .ww-home-brand {
+    grid-area: brand;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .ww-home-panel {
+    grid-area: panel;
+    gap: 0.85rem;
+    padding: 1rem;
+  }
+
+  .ww-home-note {
+    grid-area: note;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .ww-brand-seal {
+    display: none;
+  }
+
+  .ww-home-title {
+    font-size: clamp(2.6rem, 7vw, 4rem);
+  }
+
+  .ww-home-title[data-long-title] {
+    font-size: clamp(2.35rem, 6vw, 3.35rem);
+  }
+
+  .ww-home-subtitle {
+    margin-right: 0;
+    margin-left: 0;
+    font-size: 0.95rem;
+  }
+}
+
+@media (min-width: 640px) {
+  .ww-page-frame,
+  .ww-safe-screen {
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+    padding-left: max(1.5rem, env(safe-area-inset-left));
   }
 }
 
@@ -1493,7 +1689,7 @@ button.ww-player-row:not(:disabled):hover {
   }
 
   .ww-phase-panel {
-    min-height: 30rem;
+    min-height: 24rem;
   }
 }
 

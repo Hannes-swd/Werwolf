@@ -104,7 +104,7 @@ export default function ScoreBoard({ scores, myId }: Props) {
                 <span aria-label={t('components.scoreBoard.place', { place: i + 1 })}>{i + 1}.</span>
               )}
             </span>
-            <span className="flex-1 text-white font-medium">{p.playerName}</span>
+            <span className="min-w-0 flex-1 truncate text-white font-medium">{p.playerName}</span>
             <span
               className={`ww-status-chip flex items-center gap-1.5 font-bold text-sm ${p.score > 0 ? 'text-yellow-400' : 'text-gray-500'}`}
               aria-label={t('components.scoreBoard.points', { count: p.score })}

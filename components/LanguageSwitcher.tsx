@@ -18,7 +18,7 @@ export default function LanguageSwitcher({ className = '' }: { className?: strin
 
   return (
     <div
-      className={`relative inline-flex min-h-11 items-center rounded-xl border border-[var(--ww-border)] bg-white/90 shadow-[0_8px_24px_rgb(35_48_74/0.08)] backdrop-blur-xl ${className}`}
+      className={`ww-language-switcher relative inline-flex min-h-11 items-center rounded-xl border border-[var(--ww-border)] bg-white/90 shadow-[0_8px_24px_rgb(35_48_74/0.08)] backdrop-blur-xl ${className}`}
       title={t('language.label')}
     >
       <Languages className="pointer-events-none absolute start-3 text-[var(--ww-ember)]" aria-hidden="true" size={16} />

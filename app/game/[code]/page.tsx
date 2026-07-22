@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -670,9 +671,16 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
     })
   }
 
+  const historyRevision = gameState ? `${gameState.round}:${gameState.status}` : null
+  const rounds = useMemo(
+    () => historyRevision ? loadAllRounds(code) : [],
+    [code, historyRevision],
+  )
+  const events = useMemo(() => toGameEvents(rounds, t), [rounds, t])
+
   if (!gameState || !myId) {
     return (
-      <main className="ww-app-shell flex min-h-dvh items-center justify-center px-4">
+      <main className="ww-app-shell ww-safe-screen flex min-h-dvh items-center justify-center px-4">
         <div className="flex items-center gap-3 text-sm text-[var(--ww-muted)]" role="status">
           <LoaderCircle className="animate-spin" aria-hidden="true" size={18} />
           {t('game.loading')}
@@ -684,7 +692,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   const me = gameState.players.find(player => player.id === myId)
   if (!me) {
     return (
-      <main className="ww-app-shell flex min-h-dvh items-center justify-center px-4">
+      <main className="ww-app-shell ww-safe-screen flex min-h-dvh items-center justify-center px-4">
         <section className="ww-panel max-w-sm text-center">
           <CircleAlert className="mx-auto text-[var(--ww-danger)]" aria-hidden="true" />
           <h1 className="mt-3 font-display text-2xl text-[var(--ww-text)]">{t('game.playerMissing')}</h1>
@@ -704,8 +712,6 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   const voteType = gameState.status === 'mayor_election' ? 'mayor_election' : 'day_elimination'
   const currentVotes = toVotes(gameState, voteType)
   const nightActions = toNightActions(gameState)
-  const rounds = loadAllRounds(code)
-  const events = toGameEvents(rounds, t)
   const currentGirlResult = girlPeekResult?.round === gameState.round
     ? { wolves: girlPeekResult.wolves }
     : null
@@ -730,7 +736,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
 
   if (!roleConfirmed) {
     return (
-      <main className="ww-app-shell flex min-h-dvh items-center justify-center px-4 py-8">
+      <main className="ww-app-shell ww-safe-screen flex min-h-dvh items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm space-y-5">
           <RoleCard
             role={me.role!}
@@ -812,19 +818,19 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
   const phaseKey = `${gameState.round}:${gameState.status}:${gameState.phase ?? 'none'}`
 
   return (
-    <main className="ww-app-shell min-h-dvh px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6">
+    <main className="ww-app-shell ww-page-frame min-h-dvh px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6">
       {notice && <GameNotice key={notice.id} notice={notice} />}
 
       <div className="mx-auto w-full max-w-5xl">
         <header className="ww-game-header">
-          <div className="min-w-0">
+          <div className="ww-game-header-status min-w-0">
             <div className="flex items-center gap-2">
               <StatusIcon status={gameState.status} />
               <p className="ww-section-label">{statusLabel(t, gameState.status, gameState.phase)}</p>
             </div>
             <p className="mt-1 text-xs text-[var(--ww-muted)]">{t('game.round', { round: gameState.round })}</p>
           </div>
-          <div className="min-w-0 text-right">
+          <div className="ww-game-header-player min-w-0 text-right">
             <p className="flex items-center justify-end gap-1.5 truncate text-sm font-semibold text-[var(--ww-text)]">
               {me.isMayor && <Crown className="text-[var(--ww-gold)]" aria-label={t('game.mayor')} size={15} />}
               {me.role && <RoleIcon role={me.role} aria-hidden="true" size={15} />}
@@ -835,7 +841,7 @@ export default function GamePage({ params }: { params: Promise<{ code: string }>
         </header>
         {lover && <LoverCallout name={lover.displayName} />}
 
-        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(310px,0.8fr)]">
+        <div className="mt-4 grid items-start gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(310px,0.8fr)]">
           <AnimatedPanel key={phaseKey} animationKey={phaseKey} className="ww-phase-panel ww-panel" phase={gameState.status}>
             {gameState.status === 'mayor_election' && (
               <VotePanel
@@ -991,6 +997,7 @@ function AnimatedPanel({
   useLayoutEffect(() => {
     const panel = panelRef.current
     if (!panel) return
+    const focusFrame = window.requestAnimationFrame(() => panel.focus({ preventScroll: true }))
     const media = gsap.matchMedia()
     const context = gsap.context(() => {
       media.add('(prefers-reduced-motion: no-preference)', () => {
@@ -1000,12 +1007,23 @@ function AnimatedPanel({
       })
     }, panel)
     return () => {
+      window.cancelAnimationFrame(focusFrame)
       media.revert()
       context.revert()
     }
   }, [animationKey])
 
-  return <section ref={panelRef} className={className} data-phase={phase}>{children}</section>
+  return (
+    <section
+      ref={panelRef}
+      className={className}
+      data-phase={phase}
+      tabIndex={-1}
+      aria-live="polite"
+    >
+      {children}
+    </section>
+  )
 }
 
 function FocusedActionView({
@@ -1024,7 +1042,7 @@ function FocusedActionView({
   children: ReactNode
 }) {
   return (
-    <main className="ww-app-shell flex min-h-dvh items-center justify-center px-4 py-8">
+    <main className="ww-app-shell ww-safe-screen flex min-h-dvh items-center justify-center px-4 py-8">
       <AnimatedPanel animationKey={eyebrow} phase={tone} className="ww-panel w-full max-w-md">
         <header className="mb-5 text-center">
           <span className={`ww-orbit-icon mx-auto is-${tone}`}>{icon}</span>
@@ -1148,7 +1166,7 @@ function WinnerView({
   }, [])
 
   return (
-    <main ref={rootRef} className="ww-app-shell min-h-dvh px-4 py-8 sm:px-6">
+    <main ref={rootRef} className="ww-app-shell ww-safe-screen min-h-dvh px-4 py-8 sm:px-6">
       <div className="mx-auto w-full max-w-3xl">
         <header className="text-center">
           <span data-winner-mark className={`ww-winner-mark is-${winner ?? 'ended'}`}>

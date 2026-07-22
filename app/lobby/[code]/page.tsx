@@ -352,7 +352,7 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
 
   if (!lobby || !me) {
     return (
-      <main className="app-shell relative flex min-h-dvh items-center justify-center px-4">
+      <main className="app-shell ww-safe-screen relative flex min-h-dvh items-center justify-center px-4">
         <LanguageSwitcher className="absolute end-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))]" />
         <div className="flex items-center gap-3 text-sm text-[var(--ww-text-muted)]" role="status">
           <LoaderCircle className="animate-spin" aria-hidden="true" size={18} />
@@ -363,7 +363,7 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
   }
 
   return (
-    <main ref={rootRef} className="app-shell min-h-dvh px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-6">
+    <main ref={rootRef} className="app-shell ww-page-frame min-h-dvh px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-6">
       <div className="mx-auto w-full max-w-5xl">
         <div className="mb-4 flex justify-end">
           <LanguageSwitcher />
@@ -378,10 +378,10 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
           <button
             type="button"
             onClick={copyCode}
-            className="group mx-auto mt-2 flex min-h-16 items-center gap-3 rounded-xl px-4"
+            className="ww-lobby-code-button group mx-auto mt-2 flex min-h-16 items-center gap-3 rounded-xl px-4"
             aria-label={t('lobby.copyCodeLabel', { code })}
           >
-            <span className="font-display text-4xl tracking-[0.2em] text-[var(--ww-text)] sm:text-5xl" dir="ltr">{code}</span>
+            <span className="ww-lobby-code font-display text-4xl tracking-[0.2em] text-[var(--ww-text)] sm:text-5xl" dir="ltr">{code}</span>
             {copied
               ? <Check className="text-[var(--ww-success)]" aria-hidden="true" size={21} />
               : <Copy className="text-[var(--ww-text-subtle)] transition-colors group-hover:text-[var(--ww-text)]" aria-hidden="true" size={20} />}
@@ -394,7 +394,7 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
 
         <p className="sr-only" aria-live="polite" role="status">{noticeKey ? t(noticeKey) : ''}</p>
 
-        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(380px,1.1fr)]">
+        <div className="mt-5 grid items-start gap-5 md:grid-cols-[minmax(0,0.9fr)_minmax(380px,1.1fr)]">
           <section data-lobby-section className="ww-panel" aria-labelledby="players-heading">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">

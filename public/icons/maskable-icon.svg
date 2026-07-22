@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Werewolf</title>
+  <desc id="description">Minimal blue wolf symbol sized for maskable launcher icons</desc>
+  <rect width="512" height="512" fill="#F3F6FB"/>
+  <g transform="translate(256 256) scale(0.78) translate(-256 -256)">
+    <rect x="120" y="112" width="272" height="288" rx="82" fill="#4273DF"/>
+    <g transform="translate(125.5 130.9) scale(10.875)" fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3.3 2.8 7.9 7.1a8.5 8.5 0 0 1 8.2 0l4.6-4.3-.6 7.6c0 3.2-1.4 5.4-3.6 6.7l-2.5 2.3a2.2 2.2 0 0 1-3 0l-2.5-2.3c-2.2-1.3-3.6-3.5-3.6-6.7Z" stroke-width="1.4"/>
+      <path d="m8.5 11.3 2.3 1.1m4.7-1.1-2.3 1.1M10.6 15.1h2.8L12 16.8Z" stroke-width="1.2"/>
+    </g>
+  </g>
+</svg>

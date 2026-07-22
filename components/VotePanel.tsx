@@ -85,14 +85,14 @@ export default function VotePanel({ players, myId, votes, votesVisible, voteType
                   ${(alreadyVoted && !isSelected) ? 'opacity-60' : ''}
                 `}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-white font-medium">{p.displayName}</span>
+                <div className="flex w-full min-w-0 items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="min-w-0 truncate text-white font-medium">{p.displayName}</span>
                     {p.isMayor && (
-                      <UiIcon name="crown" size={15} strokeWidth={1.9} label={t('components.vote.mayor')} className="text-yellow-400" />
+                      <UiIcon name="crown" size={15} strokeWidth={1.9} label={t('components.vote.mayor')} className="shrink-0 text-yellow-400" />
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {votesVisible && count > 0 && (
                       <span className="ww-status-chip text-gray-300 text-sm font-semibold">{count}</span>
                     )}

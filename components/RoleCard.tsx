@@ -1,6 +1,6 @@
 'use client'
 
-import { useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { gsap } from 'gsap'
 import { Eye, Sparkles } from 'lucide-react'
 import type { Role } from '@/types/game'
@@ -19,6 +19,13 @@ export default function RoleCard({ role, playerName, isMayor, revealed = true, o
   const t = useT()
   const sceneRef = useRef<HTMLDivElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
+
+  useEffect(() => {
+    if (!revealed) return
+    const focusFrame = window.requestAnimationFrame(() => titleRef.current?.focus({ preventScroll: true }))
+    return () => window.cancelAnimationFrame(focusFrame)
+  }, [revealed])
 
   useLayoutEffect(() => {
     const scene = sceneRef.current
@@ -99,7 +106,14 @@ export default function RoleCard({ role, playerName, isMayor, revealed = true, o
           <div data-role-icon className="ww-role-icon mx-auto mt-4" data-role={role} aria-hidden="true">
             <RoleIcon role={role} size={58} strokeWidth={1.35} />
           </div>
-          <h2 data-role-detail className="mt-4 font-display text-4xl text-[var(--ww-text)]">{t(`roles.${role}`)}</h2>
+          <h2
+            ref={titleRef}
+            data-role-detail
+            tabIndex={-1}
+            className="mt-4 font-display text-4xl text-[var(--ww-text)]"
+          >
+            {t(`roles.${role}`)}
+          </h2>
           {isMayor && (
             <div data-role-detail className="ww-status-chip is-gold mx-auto mt-2 flex w-fit items-center gap-1.5">
               <UiIcon name="crown" size={15} strokeWidth={1.9} />

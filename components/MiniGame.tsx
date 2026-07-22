@@ -166,7 +166,7 @@ export default function MiniGame({ score, onScore, active }: Props) {
       </div>
 
       {!active && (
-        <p className="rounded-lg border border-white/6 bg-white/3 px-3 py-2 text-center text-xs text-[var(--ww-text-subtle)]" role="status">
+        <p className="rounded-lg border border-white/6 bg-white/3 px-3 py-2 text-center text-xs text-[var(--ww-muted)]" role="status">
           {t('components.miniGame.paused')}
         </p>
       )}

@@ -34,6 +34,7 @@ export default function HomePageClient() {
   const router = useRouter()
   const t = useT()
   const rootRef = useRef<HTMLElement>(null)
+  const codeInputRef = useRef<HTMLInputElement>(null)
   const joinAttemptRef = useRef<JoinAttempt | null>(null)
   const initialTranslatorRef = useRef(t)
   const generatedNameRef = useRef(false)
@@ -211,7 +212,7 @@ export default function HomePageClient() {
       </div>
 
       <div
-        className="absolute end-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-20"
+        className="ww-home-language absolute end-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-20"
         data-home-reveal
       >
         <LanguageSwitcher />
@@ -228,7 +229,7 @@ export default function HomePageClient() {
           </p>
           <h1
             className="ww-home-title"
-            style={homeTitle.length > 9 ? { fontSize: 'clamp(2.35rem, 10vw, 5.3rem)' } : undefined}
+            data-long-title={homeTitle.length > 9 ? '' : undefined}
           >
             {homeTitle}
           </h1>
@@ -246,6 +247,11 @@ export default function HomePageClient() {
               name="playerName"
               value={name}
               onChange={event => handleNameChange(event.target.value)}
+              onKeyDown={event => {
+                if (event.key !== 'Enter') return
+                event.preventDefault()
+                codeInputRef.current?.focus()
+              }}
               placeholder={t('home.namePlaceholder')}
               maxLength={20}
               autoComplete="nickname"
@@ -296,6 +302,7 @@ export default function HomePageClient() {
             <label className="ww-field-label" htmlFor="lobby-code">{t('home.codeLabel')}</label>
             <div className="ww-home-join">
               <input
+                ref={codeInputRef}
                 id="lobby-code"
                 name="lobbyCode"
                 value={joinCode}

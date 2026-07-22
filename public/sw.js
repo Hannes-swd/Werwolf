@@ -1,18 +1,53 @@
-const CACHE = 'werewolf-shell-v3'
-const SHELL = ['/', '/icon.svg']
+const CACHE_PREFIX = 'werewolf-pwa-'
+// Bump this when the offline shell changes.
+const CACHE_VERSION = 'v4'
+const CACHE_NAME = `${CACHE_PREFIX}${CACHE_VERSION}`
+const OFFLINE_URL = '/offline.html'
+const PRECACHE_URLS = [
+  OFFLINE_URL,
+  '/icon.svg',
+  '/icons/pwa-icon.svg',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/icon-maskable-512.png',
+  '/icons/apple-touch-icon.png',
+]
+
+function isCacheableAsset(pathname) {
+  return pathname.startsWith('/_next/static/')
+    || pathname === '/icon.svg'
+    || pathname.startsWith('/icons/')
+}
+
+async function offlineResponse() {
+  const cache = await caches.open(CACHE_NAME)
+  const page = await cache.match(OFFLINE_URL)
+  if (page) return page
+
+  return new Response('You are offline. Reconnect to play Werewolf.', {
+    status: 503,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  })
+}
 
 self.addEventListener('install', event => {
-  self.skipWaiting()
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)))
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME)
+    await cache.addAll(PRECACHE_URLS)
+    await self.skipWaiting()
+  })())
 })
 
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches
-      .keys()
-      .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
-      .then(() => self.clients.claim())
-  )
+  event.waitUntil((async () => {
+    const keys = await caches.keys()
+    await Promise.all(
+      keys
+        .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+        .map(key => caches.delete(key)),
+    )
+    await self.clients.claim()
+  })())
 })
 
 self.addEventListener('fetch', event => {
@@ -23,37 +58,28 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return
 
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then(response => {
-          if (response.ok) {
-            const copy = response.clone()
-            event.waitUntil(caches.open(CACHE).then(cache => cache.put(request, copy)))
-          }
-          return response
-        })
-        .catch(async () => (
-          (await caches.match(request))
-          ?? (await caches.match('/'))
-          ?? new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
-        ))
-    )
+    // Navigation stays network-only, so private room HTML is never cached.
+    event.respondWith((async () => {
+      try {
+        return await fetch(request)
+      } catch {
+        return offlineResponse()
+      }
+    })())
     return
   }
 
-  const isStaticAsset = url.pathname.startsWith('/_next/static/') || url.pathname === '/icon.svg'
-  if (!isStaticAsset) return
+  if (!isCacheableAsset(url.pathname)) return
 
-  event.respondWith(
-    caches.match(request).then(cached => {
-      if (cached) return cached
-      return fetch(request).then(response => {
-        if (response.ok && response.type === 'basic') {
-          const copy = response.clone()
-          event.waitUntil(caches.open(CACHE).then(cache => cache.put(request, copy)))
-        }
-        return response
-      })
-    })
-  )
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME)
+    const cached = await cache.match(request)
+    if (cached) return cached
+
+    const response = await fetch(request)
+    if (response.ok && response.type === 'basic') {
+      await cache.put(request, response.clone())
+    }
+    return response
+  })())
 })
